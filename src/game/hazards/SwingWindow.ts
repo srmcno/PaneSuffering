@@ -113,11 +113,14 @@ export class SwingWindow implements Hazard {
     this.alive = false;
   }
 
-  /** Corners of the swinging leaf, hinged along the pane's top edge. */
+  /** Corners of the swinging leaf, pivoting on its inner top corner. */
   private corners(): Phaser.Math.Vector2[] {
     const hx = this.pane.cx - this.dir * (PANE.width / 2);
     const hy = this.pane.cy - PANE.height / 2;
-    const a = this.open * OPEN_ANGLE * this.dir;
+    // The angle stays positive for both sides: `dir` mirrors the leaf in x
+    // only. Turning the rotation around with it swung the left-hand leaves up
+    // into the sky instead of down through the deck.
+    const a = this.open * OPEN_ANGLE;
     const cos = Math.cos(a);
     const sin = Math.sin(a);
 

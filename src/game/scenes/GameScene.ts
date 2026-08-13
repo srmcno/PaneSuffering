@@ -48,6 +48,8 @@ export class GameScene extends Phaser.Scene {
   private winchReady = false;
   /** Latches the penthouse revocation toast so it fires once per fouling. */
   private penthouseFouled = false;
+  /** Latches the notice that a dirty penthouse is holding the shift open. */
+  private penthouseHeldOpen = false;
   private alarmTimer = 0;
   private outcomeTimer = 0;
   private endReason = '';
@@ -183,6 +185,7 @@ export class GameScene extends Phaser.Scene {
     this.safetyCooldown = 0;
     this.winchReady = false;
     this.penthouseFouled = false;
+    this.penthouseHeldOpen = false;
     this.alarmTimer = 0;
     this.outcomeTimer = 0;
     this.endReason = '';
@@ -447,12 +450,26 @@ export class GameScene extends Phaser.Scene {
       }
       if (signedOff) {
         this.penthouseFouled = false;
-      } else if (this.mode === 'finale' && !this.penthouseFouled) {
+        this.penthouseHeldOpen = false;
+      } else if (this.mode === 'finale') {
         // Same rule as every other floor: you do not clock off on a floor
-        // that is no longer signed off, however loud the finale is.
-        this.penthouseFouled = true;
-        audio.play('buzz', { volume: 0.5 });
-        this.toast('Sign-off revoked — finish the glass before you clock off.', 'warn');
+        // that is no longer signed off, however loud the finale is. Say it
+        // twice, because the two moments are not the same moment — a pigeon
+        // fouling the glass mid-storm is a warning, and the set-piece ending
+        // with the glass still dirty is the thing actually holding the shift
+        // open, up to nine seconds later.
+        if (this.hazards.finaleComplete) {
+          if (!this.penthouseHeldOpen) {
+            this.penthouseHeldOpen = true;
+            audio.play('buzz', { volume: 0.5 });
+            this.fx.banner('FINISH THE GLASS', '#f6b73c', 'the penthouse is below standard');
+            this.toast('The dust has settled — the penthouse is still below standard.', 'warn');
+          }
+        } else if (!this.penthouseFouled) {
+          this.penthouseFouled = true;
+          audio.play('buzz', { volume: 0.5 });
+          this.toast('Sign-off revoked — finish the glass before you clock off.', 'warn');
+        }
       }
       return;
     }

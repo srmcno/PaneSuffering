@@ -136,18 +136,19 @@ export class Rig {
     const g = this.scene.add.graphics();
 
     // Bucket body (water is drawn separately so it can stay level).
+    const bx = RIG.bucketOffset;
     g.fillStyle(0x2e3648, 1);
     g.beginPath();
-    g.moveTo(-206, -44);
-    g.lineTo(-158, -44);
-    g.lineTo(-166, 0);
-    g.lineTo(-198, 0);
+    g.moveTo(bx - 24, -44);
+    g.lineTo(bx + 24, -44);
+    g.lineTo(bx + 16, 0);
+    g.lineTo(bx - 16, 0);
     g.closePath();
     g.fillPath();
     g.lineStyle(3, 0x7d879b, 1);
-    g.strokeRect(-206, -46, 48, 4);
+    g.strokeRect(bx - 24, -46, 48, 4);
     g.beginPath();
-    g.arc(-182, -46, 22, Math.PI, 0);
+    g.arc(bx, -46, 22, Math.PI, 0);
     g.strokePath();
 
     // Toolbox.
@@ -213,7 +214,7 @@ export class Rig {
     const slosh = Phaser.Math.Clamp(this.sim.angVel * 9, -12, 12);
     this.water.fillStyle(0x2f7fb8, 0.85);
     this.water.save();
-    this.water.translateCanvas(-182, -22);
+    this.water.translateCanvas(RIG.bucketOffset, -22);
     this.water.rotateCanvas(tilt);
     this.water.fillRect(-19, -4 + slosh * 0.3, 38, 22);
     this.water.fillStyle(0x8fd0f0, 0.7);

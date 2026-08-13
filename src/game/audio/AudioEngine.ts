@@ -60,6 +60,8 @@ export class AudioEngine {
 
   private winchOsc: OscillatorNode | null = null;
   private winchGain: GainNode | null = null;
+  private winchLfo: OscillatorNode | null = null;
+  private windLfo: OscillatorNode | null = null;
 
   private musicOn = false;
   private musicIntensity = 0;
@@ -132,12 +134,21 @@ export class AudioEngine {
 
   /* ------------------------------------------------------------- lifecycle */
 
-  /** Drive ambience and the music scheduler. Safe to call every frame. */
+  /**
+   * Scenes push their ambience parameters here rather than calling update(),
+   * which is driven once per frame from the game loop. Smoothing that runs
+   * twice in a frame converges at the wrong rate.
+   */
+  setParams(params: { wind?: number; intensity?: number }): void {
+    if (params.wind !== undefined) this.windTarget = params.wind;
+    if (params.intensity !== undefined) this.musicIntensityTarget = params.intensity;
+  }
+
+  /** Drive ambience and the music scheduler. Called once per frame. */
   update(dt: number, params: { wind?: number; intensity?: number } = {}): void {
     if (!this.ctx) return;
 
-    if (params.wind !== undefined) this.windTarget = params.wind;
-    if (params.intensity !== undefined) this.musicIntensityTarget = params.intensity;
+    this.setParams(params);
 
     this.musicIntensity += (this.musicIntensityTarget - this.musicIntensity) * Math.min(1, dt * 1.4);
 
@@ -165,7 +176,11 @@ export class AudioEngine {
     this.setSqueegee(false, 0);
     this.setWinch(false);
     this.windSource?.stop();
+    this.windLfo?.stop();
     this.windSource = null;
+    this.windLfo = null;
+    this.windFilter = null;
+    this.windGain = null;
     void this.ctx?.close();
     this.ctx = null;
     this.started = false;
@@ -325,16 +340,20 @@ export class AudioEngine {
       gain.gain.setTargetAtTime(0.11, ctx.currentTime, 0.12);
       this.winchOsc = osc;
       this.winchGain = gain;
+      this.winchLfo = lfo;
     }
 
     if (!active && this.winchOsc) {
       const osc = this.winchOsc;
       const gain = this.winchGain;
+      const lfo = this.winchLfo;
       this.winchOsc = null;
       this.winchGain = null;
+      this.winchLfo = null;
       gain?.gain.setTargetAtTime(0.0001, ctx.currentTime, 0.08);
       try {
         osc.stop(ctx.currentTime + 0.4);
+        lfo?.stop(ctx.currentTime + 0.4);
       } catch {
         /* already stopped */
       }
@@ -454,6 +473,7 @@ export class AudioEngine {
     lfoGain.gain.value = 160;
     lfo.connect(lfoGain).connect(filter.frequency);
     lfo.start();
+    this.windLfo = lfo;
 
     src.connect(filter).connect(gain).connect(this.master);
     src.start();

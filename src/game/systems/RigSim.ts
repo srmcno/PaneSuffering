@@ -143,8 +143,12 @@ export class RigSim {
     this.bobY = Phaser.Math.Clamp(this.bobY, -26, 26);
 
     /* ------------------------------------------------------------ winch */
-    if (this.winching && this.y > this.targetY) {
-      this.y = Math.max(this.targetY, this.y - RIG.winchSpeed * dt);
+    if (this.winching && !this.atTarget) {
+      const step = RIG.winchSpeed * dt;
+      this.y =
+        this.y > this.targetY
+          ? Math.max(this.targetY, this.y - step)
+          : Math.min(this.targetY, this.y + step);
       // Hoisting an unevenly loaded deck makes it lurch.
       this.angVel += Math.sin(this.y * 0.02) * 0.0016;
     }

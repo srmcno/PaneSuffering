@@ -20,7 +20,6 @@ export class ScoreSystem {
   panesCleaned = 0;
   spotlessCount = 0;
   bestMultiplier = 1;
-  floorsCleared = 0;
 
   /** Kept as a float so a slow scrub still accrues; exposed rounded. */
   private total = 0;
@@ -67,11 +66,10 @@ export class ScoreSystem {
   }
 
   /** Floor clear bonus, decaying with time taken. Returns the points awarded. */
-  finishFloor(floor: number, seconds: number): number {
+  finishFloor(seconds: number): number {
     const base = Math.max(FLOOR_FLOOR, FLOOR_BASE - FLOOR_DECAY_PER_SEC * seconds);
     const points = Math.round(base) * this.multiplier;
     this.total += points;
-    this.floorsCleared = Math.max(this.floorsCleared, floor + 1);
     return points;
   }
 

@@ -96,7 +96,10 @@ export class Pigeon implements Hazard {
         this.x += this.vx * dt;
         this.y += this.vy * dt;
         if (!this.hasSoiled && this.y < perch.y - 40) this.soilPane(ctx);
-        if (this.x < -160 || this.x > VIEW.W + 160 || this.y < ctx.sim.surfaceY - 900) this.alive = false;
+        if (this.x < -160 || this.x > VIEW.W + 160 || this.y < ctx.sim.surfaceY - 900) {
+          this.destroy();
+          return;
+        }
         break;
       }
     }

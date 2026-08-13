@@ -257,6 +257,7 @@ export class BootScene extends Phaser.Scene {
 
   /** Bird dropping: an opaque splat that needs extra scrubbing. */
   private makeSplat(): void {
+    const rng = new Rng(0x51a7);
     this.canvas('splat', 96, 96, (ctx, w, h) => {
       const cx = w / 2;
       const cy = h / 2;
@@ -275,10 +276,10 @@ export class BootScene extends Phaser.Scene {
       // Runs and satellite drops.
       ctx.fillStyle = 'rgba(228,230,214,0.85)';
       for (let i = 0; i < 6; i++) {
-        const a = Math.random() * Math.PI * 2;
-        const d = 22 + Math.random() * 16;
+        const a = rng.between(0, Math.PI * 2);
+        const d = rng.between(22, 38);
         ctx.beginPath();
-        ctx.arc(cx + Math.cos(a) * d, cy + Math.sin(a) * d, 2 + Math.random() * 4, 0, Math.PI * 2);
+        ctx.arc(cx + Math.cos(a) * d, cy + Math.sin(a) * d, rng.between(2, 6), 0, Math.PI * 2);
         ctx.fill();
       }
       ctx.fillStyle = 'rgba(206,200,150,0.8)';
@@ -371,14 +372,15 @@ export class BootScene extends Phaser.Scene {
 
   /** Fine film grain, tiled over the whole frame at low alpha. */
   private makeGrain(): void {
+    const rng = new Rng(0x94a1);
     this.canvas('grain', 128, 128, (ctx, w, h) => {
       const img = ctx.createImageData(w, h);
       for (let i = 0; i < img.data.length; i += 4) {
-        const v = 120 + Math.random() * 135;
+        const v = rng.between(120, 255);
         img.data[i] = v;
         img.data[i + 1] = v;
         img.data[i + 2] = v;
-        img.data[i + 3] = Math.random() * 46;
+        img.data[i + 3] = rng.between(0, 46);
       }
       ctx.putImageData(img, 0, 0);
     });

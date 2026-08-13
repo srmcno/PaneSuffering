@@ -26,8 +26,9 @@ const unlock = () => audio.unlock();
 window.addEventListener('pointerdown', unlock, { once: true });
 window.addEventListener('keydown', unlock, { once: true });
 
-// One global tick keeps the ambience and adaptive music running in every
-// scene, not just gameplay; scenes layer their own parameters on top.
+// The single audio tick for the whole app: ambience and adaptive music keep
+// running in every scene, and scenes push their parameters via setParams
+// rather than calling update() themselves, so smoothing advances once a frame.
 game.events.on(Phaser.Core.Events.POST_STEP, (_time: number, delta: number) => {
   audio.update(Math.min(delta / 1000, 0.1));
 });

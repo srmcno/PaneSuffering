@@ -68,8 +68,8 @@ export const Save = {
 
   recordRun(score: number, floorsCleared: number): { bestScore: number; newBest: boolean } {
     const data = Save.load();
-    const runScore = Math.max(0, Math.round(score));
-    const runFloor = Math.max(0, Math.round(floorsCleared));
+    const runScore = Number.isFinite(score) ? Math.max(0, Math.round(score)) : 0;
+    const runFloor = Number.isFinite(floorsCleared) ? Math.max(0, Math.round(floorsCleared)) : 0;
     const newBest = runScore > data.bestScore;
 
     const bestScore = Math.max(data.bestScore, runScore);

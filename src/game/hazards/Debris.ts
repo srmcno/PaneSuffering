@@ -224,7 +224,10 @@ export class Debris implements Hazard {
       this.spinRate *= 1.6;
     }
 
-    if (this.y > ctx.sim.surfaceY + VIEW.H * 0.75 || this.x < -200 || this.x > VIEW.W + 200) this.finish();
+    if (this.y > ctx.sim.surfaceY + VIEW.H * 0.75 || this.x < -200 || this.x > VIEW.W + 200) {
+      this.finish();
+      return;
+    }
 
     this.draw();
   }

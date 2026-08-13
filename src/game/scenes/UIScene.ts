@@ -415,7 +415,14 @@ export class UIScene extends Phaser.Scene {
 
     this.text(BAR_LEFT, 620, 'FLOOR CLEANLINESS', 10, CSS.dim, 3);
     this.progressText = this.text(BAR_RIGHT, 618, '0%', 13, CSS.amber, 1, true).setOrigin(1, 0);
-    this.text(BAR_LEFT + 460 * RULES.floorTarget, BAR_TOP + BAR_H + 4, 'TARGET', 8, CSS.dim, 2).setOrigin(0.5, 0);
+    this.text(
+      BAR_LEFT + (BAR_RIGHT - BAR_LEFT) * RULES.floorTarget,
+      BAR_TOP + BAR_H + 4,
+      'TARGET',
+      8,
+      CSS.dim,
+      2,
+    ).setOrigin(0.5, 0);
     this.text(CX, 576, 'WIND', 9, CSS.dim, 4).setOrigin(0.5, 0);
   }
 

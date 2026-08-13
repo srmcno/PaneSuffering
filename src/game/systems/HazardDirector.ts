@@ -70,7 +70,9 @@ export class HazardDirector {
       this.spawnTimer = Math.max(this.spawnTimer, 1.4);
     }
 
-    for (const hazard of this.hazards) hazard.update(dt, ctx);
+    // Snapshot first: a hazard can spawn another through the event bus, and
+    // for..of would step the newcomer on the frame it was created.
+    for (const hazard of this.hazards.slice()) hazard.update(dt, ctx);
 
     const survivors: Hazard[] = [];
     for (const hazard of this.hazards) {

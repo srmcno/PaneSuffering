@@ -38,7 +38,7 @@ export class Projectile implements Hazard {
 
     if (!this.hasHit && d < 26 && !ctx.washer.isDown && !ctx.washer.isCrouched) {
       this.hasHit = true;
-      ctx.hit(8, Math.sign(this.vx) * 40, 'thrown');
+      ctx.hit(8, Math.sign(this.vx || 1) * 40, 'thrown');
       ctx.fx.impact(this.x, this.y);
       this.alive = false;
       this.destroy();

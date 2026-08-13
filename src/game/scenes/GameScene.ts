@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import {
   FLOOR_COUNT,
   PANE,
+  RIG,
   ROOF_Y,
   RULES,
   SIM,
@@ -48,6 +49,10 @@ export class GameScene extends Phaser.Scene {
   private alarmTimer = 0;
   private outcomeTimer = 0;
   private endReason = '';
+  /** Latched the moment a run ends, so no later frame can re-finish it. */
+  private finished = false;
+  private hudReady = false;
+  private readonly pendingToasts: Array<{ text: string; tone: ToastTone }> = [];
   private tutorialStep = 0;
   private sawFirstTilt = false;
   private sawDrySoap = false;
@@ -88,6 +93,7 @@ export class GameScene extends Phaser.Scene {
   update(_time: number, deltaMs: number): void {
     // Clamp so a stalled tab cannot teleport the simulation.
     const dt = Math.min(deltaMs / 1000, 1 / 20);
+    if (!this.hudReady) this.flushToasts();
     const intent = this.controls.getIntent();
 
     if (intent.mutePressed) {
@@ -118,6 +124,7 @@ export class GameScene extends Phaser.Scene {
       this.rig.update(dt, Rig.danger(this.sim));
       this.followCamera(dt);
       this.fx.update(dt);
+      this.emitHud();
       if (this.outcomeTimer <= 0) this.finish(false, this.endReason);
       return;
     }
@@ -152,7 +159,7 @@ export class GameScene extends Phaser.Scene {
     this.emitHud();
     this.checkFailure();
 
-    audio.update(dt, {
+    audio.setParams({
       wind: Phaser.Math.Clamp(Math.abs(this.hazards.wind) * 0.7 + this.floor / FLOOR_COUNT / 2, 0, 1),
       intensity: this.musicIntensity(),
     });
@@ -173,6 +180,9 @@ export class GameScene extends Phaser.Scene {
     this.alarmTimer = 0;
     this.outcomeTimer = 0;
     this.endReason = '';
+    this.finished = false;
+    this.hudReady = false;
+    this.pendingToasts.length = 0;
     this.tutorialStep = 0;
     this.sawFirstTilt = false;
     this.sawDrySoap = false;
@@ -205,11 +215,13 @@ export class GameScene extends Phaser.Scene {
     audio.setSqueegee(false, 0);
     audio.setWinch(false);
     audio.play('click');
+    this.input.keyboard?.resetKeys();
     this.scene.pause();
     this.scene.launch('PauseScene');
   }
 
   private resumeFromPause(): void {
+    this.input.keyboard?.resetKeys();
     this.scene.resume();
   }
 
@@ -320,7 +332,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private beginAscent(): void {
-    const points = this.score.finishFloor(this.floor, this.elapsed - this.floorStart);
+    const points = this.score.finishFloor(this.elapsed - this.floorStart);
     this.fx.popup(this.sim.worldX, this.sim.surfaceY - 150, `FLOOR CLEAR +${points}`, '#5ce8a0');
     this.floorsCleared++;
     this.winchReady = false;
@@ -335,7 +347,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private updateSoap(dt: number, intent: InputIntent): void {
-    const nearBucket = Math.abs(this.washer.localX + 182) < 110;
+    const nearBucket = Math.abs(this.washer.localX - RIG.bucketOffset) < 110;
     if (this.washer.isCleaning && this.soap > 0) {
       this.soap = Math.max(0, this.soap - RULES.soapDrain * dt);
       if (this.soap <= 0) {
@@ -459,7 +471,12 @@ export class GameScene extends Phaser.Scene {
       this.events.emit('grab', { active: false, progress: 0, timeLeft: 0 });
     }
 
-    if (this.mode === 'finale' && this.hazards.finaleComplete) {
+    if (
+      this.mode === 'finale' &&
+      this.hazards.finaleComplete &&
+      this.washer.health > 0 &&
+      this.washer.state !== 'fall'
+    ) {
       this.floorsCleared = FLOOR_COUNT;
       this.score.bonus(1500);
       this.finish(true, 'Penthouse survived. Shift complete.');
@@ -467,6 +484,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   private checkFailure(): void {
+    // Hazards resolve before the finale's win check, so a hit can zero health
+    // on the very frame the run is won. The completed run wins that race.
+    if (this.finished || this.mode === 'over') return;
     if (this.washer.state === 'fall' && this.mode !== 'falling') {
       this.beginFallSequence();
       return;
@@ -516,8 +536,9 @@ export class GameScene extends Phaser.Scene {
     );
     cam.scrollY = Phaser.Math.Linear(cam.scrollY, target, Math.min(1, dt * 7));
     this.tower.update(cam.scrollY, VIEW.H);
+    this.emitHud();
 
-    audio.update(dt, { wind: 1, intensity: 0 });
+    audio.setParams({ wind: 1, intensity: 0 });
 
     if (this.washer.fallY > STREET_Y - 40 || this.outcomeTimer <= 0) {
       this.mode = 'over';
@@ -549,8 +570,23 @@ export class GameScene extends Phaser.Scene {
     return Phaser.Math.Clamp(danger * 0.5 + hurt * 0.25 + altitude * 0.3 + finale, 0, 1);
   }
 
+  /**
+   * `scene.launch` is queued, so the HUD is not listening yet while create()
+   * runs. Buffer anything emitted before the first update or the onboarding
+   * message is silently dropped on every run.
+   */
   private toast(text: string, tone: ToastTone): void {
+    if (!this.hudReady) {
+      this.pendingToasts.push({ text, tone });
+      return;
+    }
     this.events.emit('toast', { text, tone });
+  }
+
+  private flushToasts(): void {
+    this.hudReady = true;
+    for (const t of this.pendingToasts) this.events.emit('toast', t);
+    this.pendingToasts.length = 0;
   }
 
   private emitHud(): void {
@@ -576,7 +612,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   private finish(win: boolean, reason: string): void {
-    if (this.mode === 'over' && this.scene.isActive('GameOverScene')) return;
+    if (this.finished) return;
+    this.finished = true;
     this.mode = 'over';
 
     audio.setSqueegee(false, 0);

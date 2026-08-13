@@ -63,6 +63,8 @@ export const RIG = {
   walkLimit: 388,
   /** Cable attachment offset from deck centre. */
   cableOffset: 408,
+  /** Deck-local X of the water bucket; the soap refill zone keys off this. */
+  bucketOffset: -182,
   /** Guard rail posts. */
   railOffset: 418,
   railHeight: 74,

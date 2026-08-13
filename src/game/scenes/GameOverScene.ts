@@ -426,9 +426,9 @@ export class GameOverScene extends Phaser.Scene {
 
       const root = this.add.container(x, BTN_Y, [base, highlight, text]).setAlpha(0);
       const i = this.entries.length;
-      const hit = this.add
-        .rectangle(x, BTN_Y, BTN_W, BTN_H, 0xffffff, 0)
-        .setInteractive({ useHandCursor: true });
+      const hit = this.add.rectangle(x, BTN_Y, BTN_W, BTN_H, 0xffffff, 0);
+      // Deliberately inert until the button has actually appeared: players
+      // click reflexively when a run ends, and this sits under the cursor.
       hit.on('pointerover', () => this.select(i));
       hit.on('pointerdown', () => {
         this.select(i);
@@ -442,6 +442,7 @@ export class GameOverScene extends Phaser.Scene {
         duration: 340,
         delay: delay + i * 110,
         ease: 'Back.Out',
+        onComplete: () => hit.setInteractive({ useHandCursor: true }),
       });
       this.entries.push({ root, highlight, text, activate });
     };

@@ -1,8 +1,8 @@
 import Phaser from 'phaser';
 import { CSS, DEPTH, FONT, PALETTE, VIEW } from '../config';
 
-type PadAction = 'left' | 'right' | 'crouch' | 'clean' | 'winch' | 'safety';
-type Glyph = 'arrowLeft' | 'arrowRight' | 'chevronDown' | 'chevronUp' | 'squeegee' | 'hook';
+type PadAction = 'left' | 'right' | 'crouch' | 'clean' | 'winch' | 'safety' | 'pause';
+type Glyph = 'arrowLeft' | 'arrowRight' | 'chevronDown' | 'chevronUp' | 'squeegee' | 'hook' | 'bars';
 
 interface PadSpec {
   action: PadAction;
@@ -43,6 +43,10 @@ const PAD_SPECS: readonly PadSpec[] = [
   { action: 'clean', glyph: 'squeegee', label: 'CLEAN', cx: VIEW.W - EDGE - 92, cy: 436, w: 184, h: 184, accent: PALETTE.amber },
   { action: 'winch', glyph: 'chevronUp', label: 'ASCEND', cx: VIEW.W - EDGE - 262, cy: 386, w: 148, h: 88, accent: PALETTE.hiVis },
   { action: 'safety', glyph: 'hook', label: 'SAFETY', cx: VIEW.W - EDGE - 262, cy: 486, w: 148, h: 88, accent: PALETTE.good },
+
+  // Without this a touch player has no way to reach the pause menu at all,
+  // and therefore no way to mute, restart or quit mid-run.
+  { action: 'pause', glyph: 'bars', label: '', cx: VIEW.W - EDGE - 30, cy: 214, w: 60, h: 60, accent: PALETTE.steelDark },
 ];
 
 /**
@@ -58,10 +62,12 @@ export class TouchControls {
     clean: boolean;
     winch: boolean;
     safety: boolean;
-  } = { left: false, right: false, crouch: false, clean: false, winch: false, safety: false };
+    pause: boolean;
+  } = { left: false, right: false, crouch: false, clean: false, winch: false, safety: false, pause: false };
 
   private readonly pads: Pad[] = [];
   private safetyLatch = false;
+  private pauseLatch = false;
   private anyLatch = false;
   private destroyed = false;
 
@@ -92,6 +98,12 @@ export class TouchControls {
   public consumeSafetyPress(): boolean {
     const pressed = this.safetyLatch;
     this.safetyLatch = false;
+    return pressed;
+  }
+
+  public consumePausePress(): boolean {
+    const pressed = this.pauseLatch;
+    this.pauseLatch = false;
     return pressed;
   }
 
@@ -227,6 +239,11 @@ export class TouchControls {
         g.lineTo(24, cy - 34);
         g.strokePath();
         break;
+      case 'bars':
+        g.fillStyle(PALETTE.paper, 0.9);
+        g.fillRect(-9, cy - 11, 7, 22);
+        g.fillRect(2, cy - 11, 7, 22);
+        break;
       case 'hook':
         g.lineStyle(5, PALETTE.paper, 0.9);
         g.beginPath();
@@ -248,6 +265,7 @@ export class TouchControls {
     this.state[pad.spec.action] = true;
     this.anyLatch = true;
     if (pad.spec.action === 'safety') this.safetyLatch = true;
+    if (pad.spec.action === 'pause') this.pauseLatch = true;
     pad.root.setScale(0.96);
     this.drawFace(pad, true);
   }

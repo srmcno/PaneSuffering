@@ -483,6 +483,12 @@ export class TitleScene extends Phaser.Scene {
 
   private activate(): void {
     if (this.leaving) return;
+    // Confirm closes the controls panel rather than falling through to the
+    // menu row hidden behind it.
+    if (this.panelOpen) {
+      this.toggleControls();
+      return;
+    }
     this.entries[this.index].activate();
   }
 
@@ -510,6 +516,9 @@ export class TitleScene extends Phaser.Scene {
       .setDepth(UI_DEPTH + 28)
       .setAlpha(0)
       .setVisible(false);
+    // Interactive purely to swallow clicks aimed at the menu behind the modal.
+    this.scrim.setInteractive();
+    this.scrim.on('pointerdown', () => this.toggleControls());
 
     const g = this.add.graphics();
     g.fillStyle(PALETTE.ink, 0.93);

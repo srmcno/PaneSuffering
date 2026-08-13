@@ -75,7 +75,7 @@ Touch controls appear automatically the first time a touch pointer is seen.
 
 ## Architecture
 
-```
+```text
 src/
   main.ts                  Phaser bootstrap, global audio tick, dev handle
   game/

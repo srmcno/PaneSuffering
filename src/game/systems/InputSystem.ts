@@ -107,6 +107,7 @@ export class InputSystem {
 
     const padAny = this.touch.consumeAnyPress();
     const padSafety = this.touch.consumeSafetyPress();
+    const padPause = this.touch.consumePausePress();
 
     /* -------------------------------------------------------------- move */
 
@@ -129,7 +130,7 @@ export class InputSystem {
       cleanHeld: this.anyDown(Controls.clean) || mouseLeft || pads.clean,
       winchHeld: this.anyDown(Controls.winch) || pads.winch,
       safetyPressed: safetyKeyEdge || mouseRightEdge || padSafety,
-      pausePressed: pauseEdge,
+      pausePressed: pauseEdge || padPause,
       mutePressed: muteEdge,
       anyTapped: cleanEdge || crouchEdge || safetyKeyEdge || mouseLeftEdge || mouseRightEdge || padAny,
     };

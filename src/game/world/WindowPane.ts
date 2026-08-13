@@ -30,6 +30,7 @@ export class WindowPane {
   bonusPaid = false;
   spotlessPaid = false;
 
+  private readonly interior: Phaser.GameObjects.Image;
   private readonly grime: Phaser.GameObjects.RenderTexture;
   private readonly sheen: Phaser.GameObjects.Image;
   private readonly rim: Phaser.GameObjects.Rectangle;
@@ -49,7 +50,7 @@ export class WindowPane {
     this.cellH = PANE.height / ROWS;
     this.grimeKey = `grime${rng.int(0, 2)}`;
 
-    scene.add
+    this.interior = scene.add
       .image(x, y, `interior${rng.int(0, 5)}`)
       .setDisplaySize(PANE.width, PANE.height)
       .setDepth(DEPTH.paneGlass);
@@ -151,6 +152,7 @@ export class WindowPane {
   }
 
   destroy(): void {
+    this.interior.destroy();
     this.grime.destroy();
     this.sheen.destroy();
     this.rim.destroy();

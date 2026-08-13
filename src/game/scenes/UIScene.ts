@@ -79,6 +79,7 @@ const IDLE_HUD: HudState = {
   winchReady: false,
   wind: 0,
   elapsed: 0,
+  touch: false,
 };
 
 /**
@@ -122,6 +123,7 @@ export class UIScene extends Phaser.Scene {
   private hurtEdge!: Phaser.GameObjects.Image;
 
   private winch!: Phaser.GameObjects.Container;
+  private winchLabel!: Phaser.GameObjects.Text;
   private winchShown = false;
 
   private toastBox!: Phaser.GameObjects.Container;
@@ -212,6 +214,7 @@ export class UIScene extends Phaser.Scene {
       });
     }
 
+    this.winchLabel.setText(state.touch ? 'HOLD ASCEND PAD' : 'HOLD W — ASCEND');
     if (state.winchReady !== this.winchShown) this.setWinchPrompt(state.winchReady);
     this.hud = state;
   }
@@ -439,7 +442,7 @@ export class UIScene extends Phaser.Scene {
     g.strokeRoundedRect(-w, -h / 2, w, h, 6);
     this.hazard(g, -w + 6, h / 2 - 12, 26, 8, 1);
 
-    const label = this.add
+    this.winchLabel = this.add
       .text(-w + 44, 0, 'HOLD W — ASCEND', {
         fontFamily: FONT,
         fontSize: '15px',
@@ -461,7 +464,7 @@ export class UIScene extends Phaser.Scene {
     }
 
     this.winch = this.add
-      .container(FLOOR_RIGHT, 580, [g, label, arrow])
+      .container(FLOOR_RIGHT, 580, [g, this.winchLabel, arrow])
       .setDepth(12)
       .setVisible(false)
       .setAlpha(0);

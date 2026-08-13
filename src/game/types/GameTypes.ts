@@ -28,6 +28,8 @@ export interface HudState {
   winchReady: boolean;
   wind: number;
   elapsed: number;
+  /** Touch pads are driving the run, so prompts must not name keys. */
+  touch: boolean;
 }
 
 export type ToastTone = 'info' | 'warn' | 'good';

@@ -20,6 +20,18 @@ const isTouchLike = (pointer: Phaser.Input.Pointer): boolean => {
  * all rising edges are latched here and cleared on read, so a held button can
  * never masquerade as a repeated press.
  */
+/**
+ * Latched for the whole session the first time a touch pointer is seen
+ * anywhere. Scene-local detection would reset on every restart and miss the
+ * touch that started the run, so prompts would name keys for a frame or two
+ * on exactly the device that has none.
+ */
+let touchSeenThisSession = false;
+
+export function markTouchSeen(): void {
+  touchSeenThisSession = true;
+}
+
 export class InputSystem {
   private readonly keys = new Map<string, Phaser.Input.Keyboard.Key>();
   private readonly keyboard: Phaser.Input.Keyboard.KeyboardPlugin | null;
@@ -73,7 +85,7 @@ export class InputSystem {
   }
 
   public get touchActive(): boolean {
-    return this.touchSeen;
+    return this.touchSeen || touchSeenThisSession;
   }
 
   public getIntent(): InputIntent {
@@ -171,6 +183,7 @@ export class InputSystem {
   private revealTouchControls(): void {
     if (this.touchSeen) return;
     this.touchSeen = true;
+    markTouchSeen();
     this.touch.setVisible(true);
   }
 

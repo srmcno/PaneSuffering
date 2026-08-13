@@ -425,7 +425,7 @@ export class TitleScene extends Phaser.Scene {
         .text(
           COL_X,
           y,
-          `PERSONAL BEST   ${save.bestScore.toLocaleString('en-US')}   ·   FLOOR ${String(save.bestFloor).padStart(2, '0')}   ·   ${save.runs} SHIFT${save.runs === 1 ? '' : 'S'}`,
+          `PERSONAL BEST   ${save.bestScore.toLocaleString('en-US')}   ·   ${save.bestFloor} FLOOR${save.bestFloor === 1 ? '' : 'S'} CLEARED   ·   ${save.runs} SHIFT${save.runs === 1 ? '' : 'S'}`,
           { fontFamily: FONT, fontSize: '14px', color: CSS.amber, letterSpacing: 3 },
         )
         .setScrollFactor(0)

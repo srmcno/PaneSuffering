@@ -87,7 +87,7 @@ export class GameScene extends Phaser.Scene {
 
     audio.unlock();
     audio.startMusic();
-    this.toast('Floor 41. Four panes. HOLD SPACE to work the squeegee.', 'info');
+    this.toast(`Floor 41. Four panes. ${this.prompt('clean')} to work the squeegee.`, 'info');
   }
 
   update(_time: number, deltaMs: number): void {
@@ -317,7 +317,7 @@ export class GameScene extends Phaser.Scene {
         audio.play('thud', { volume: 0.5, detune: 120 });
         this.toast(`Floor ${41 + this.floor}. ${PANE.perFloor} panes.`, 'info');
         if (this.floor === 1) {
-          this.toast('SHIFT snaps the safety line: levels the deck and buys you a second.', 'good');
+          this.toast(`${this.prompt('safety')} snaps the safety line: levels the deck and buys you a second.`, 'good');
         }
         if (this.floor === FLOOR_COUNT - 1) {
           this.toast('Penthouse. Whatever is going on in there, finish the glass.', 'warn');
@@ -393,7 +393,7 @@ export class GameScene extends Phaser.Scene {
       if (Math.random() < 0.25) this.fx.grimeBurst(blade.x, blade.y + 14);
       if (this.tutorialStep === 0) {
         this.tutorialStep = 1;
-        this.toast('Walk with A / D to sweep the blade across the glass.', 'info');
+        this.toast(`Walk with ${this.prompt('walk')} to sweep the blade across the glass.`, 'info');
       }
     } else if (!wet && Math.random() < dt * 3) {
       this.fx.popup(blade.x, blade.y, 'squeak', '#8e9bb3');
@@ -431,8 +431,8 @@ export class GameScene extends Phaser.Scene {
     if (progress >= RULES.floorTarget && !this.winchReady) {
       this.winchReady = true;
       audio.play('confirm', { volume: 0.8 });
-      this.fx.banner('FLOOR CLEAR', '#5ce8a0', 'HOLD W to winch up');
-      this.toast('Floor signed off. HOLD W to winch up to the next one.', 'good');
+      this.fx.banner('FLOOR CLEAR', '#5ce8a0', `${this.prompt('winch')} to winch up`);
+      this.toast(`Floor signed off. ${this.prompt('winch')} to winch up to the next one.`, 'good');
     }
   }
 
@@ -453,7 +453,7 @@ export class GameScene extends Phaser.Scene {
 
     if (!this.sawFirstTilt && Math.abs(this.sim.angle) > 0.17) {
       this.sawFirstTilt = true;
-      this.toast('The deck tips under your weight. HOLD S to crouch and brace.', 'warn');
+      this.toast(`The deck tips under your weight. ${this.prompt('crouch')} to crouch and brace.`, 'warn');
     }
 
     if (this.sim.clangedThisFrame) {
@@ -576,6 +576,27 @@ export class GameScene extends Phaser.Scene {
    * runs. Buffer anything emitted before the first update or the onboarding
    * message is silently dropped on every run.
    */
+  /**
+   * Names whichever control the player actually has. Naming a key on a touch
+   * device is not a cosmetic problem: the winch prompt is the progression
+   * gate and the crouch prompt is the answer to being tipped off the rig.
+   */
+  private prompt(action: 'clean' | 'walk' | 'crouch' | 'safety' | 'winch'): string {
+    const touch = this.controls.touchActive;
+    switch (action) {
+      case 'clean':
+        return touch ? 'HOLD CLEAN' : 'HOLD SPACE';
+      case 'walk':
+        return touch ? 'the ◀ / ▶ pads' : 'A / D';
+      case 'crouch':
+        return touch ? 'HOLD CROUCH' : 'HOLD S';
+      case 'safety':
+        return touch ? 'The SAFETY pad' : 'SHIFT';
+      case 'winch':
+        return touch ? 'HOLD ASCEND' : 'HOLD W';
+    }
+  }
+
   private toast(text: string, tone: ToastTone): void {
     if (!this.hudReady) {
       this.pendingToasts.push({ text, tone });
@@ -608,6 +629,7 @@ export class GameScene extends Phaser.Scene {
       winchReady: this.winchReady,
       wind: this.hazards.wind,
       elapsed: this.elapsed,
+      touch: this.controls.touchActive,
     };
     this.events.emit('hud', state);
   }

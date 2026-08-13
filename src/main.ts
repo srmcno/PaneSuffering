@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { GAME_CONFIG } from './game/config';
 import { audio } from './game/audio/AudioEngine';
+import { markTouchSeen } from './game/systems/InputSystem';
 import { BootScene } from './game/scenes/BootScene';
 import { TitleScene } from './game/scenes/TitleScene';
 import { GameScene } from './game/scenes/GameScene';
@@ -23,6 +24,13 @@ if (import.meta.env.DEV || new URLSearchParams(window.location.search).has('debu
 // WebAudio needs a real gesture; the scenes call unlock() too, but catching it
 // at the document level means the very first click anywhere counts.
 const unlock = () => audio.unlock();
+window.addEventListener(
+  'pointerdown',
+  (e) => {
+    if (e.pointerType === 'touch' || e.pointerType === 'pen') markTouchSeen();
+  },
+  { capture: true },
+);
 window.addEventListener('pointerdown', unlock, { once: true });
 window.addEventListener('keydown', unlock, { once: true });
 

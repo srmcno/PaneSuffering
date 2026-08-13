@@ -215,13 +215,13 @@ export class GameScene extends Phaser.Scene {
     audio.setSqueegee(false, 0);
     audio.setWinch(false);
     audio.play('click');
-    this.input.keyboard?.resetKeys();
+    this.controls.reset();
     this.scene.pause();
     this.scene.launch('PauseScene');
   }
 
   private resumeFromPause(): void {
-    this.input.keyboard?.resetKeys();
+    this.controls.reset();
     this.scene.resume();
   }
 

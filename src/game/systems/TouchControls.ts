@@ -113,6 +113,19 @@ export class TouchControls {
     return pressed;
   }
 
+  /**
+   * Drop every pad and latch. Pausing the scene stops Phaser delivering input
+   * to it, so the pointer-up that would have released the pad never arrives;
+   * without this the pad stays owned by a finger that is long gone and
+   * silently ignores every later press.
+   */
+  public releaseAll(): void {
+    for (const pad of this.pads) this.release(pad);
+    this.safetyLatch = false;
+    this.pauseLatch = false;
+    this.anyLatch = false;
+  }
+
   public setVisible(visible: boolean): void {
     for (const pad of this.pads) {
       if (!visible) this.release(pad);

@@ -136,6 +136,22 @@ export class InputSystem {
     };
   }
 
+  /**
+   * Forget all held and latched input. Called across a pause boundary, where
+   * the scene stops receiving events and would otherwise resume believing
+   * keys and pads are still held.
+   */
+  public reset(): void {
+    this.keyboard?.resetKeys();
+    this.touch.releaseAll();
+    this.prevMouseLeft = false;
+    this.prevMouseRight = false;
+    this.mouseLeftLatch = false;
+    this.mouseRightLatch = false;
+    this.touchLeftSince = 0;
+    this.touchRightSince = 0;
+  }
+
   public destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;

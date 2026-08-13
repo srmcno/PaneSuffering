@@ -26,7 +26,7 @@ export class WindowPane {
   progress = 0;
   /** True once every cell is clean, which pays the spotless bonus. */
   spotless = false;
-  /** Latched so each bonus is only paid once per pane. */
+  /** Lifetime latches: each bonus is paid at most once per pane, ever. */
   bonusPaid = false;
   spotlessPaid = false;
 
@@ -142,9 +142,10 @@ export class WindowPane {
     }
     this.cleanCells = Math.max(0, this.cleanCells);
     this.progress = this.cleanCells / CELL_COUNT;
+    // Cleanliness reopens, but bonusPaid/spotlessPaid deliberately do not:
+    // they are lifetime award latches, and re-paying them would let repeated
+    // pigeon visits farm score, panes-cleaned and multiplier streak.
     this.spotless = false;
-    this.bonusPaid = false;
-    this.spotlessPaid = false;
     this.sheen.setAlpha(0.1 + this.progress * 0.34);
     this.rim.setStrokeStyle(2, 0x8fd6ff, 0);
   }

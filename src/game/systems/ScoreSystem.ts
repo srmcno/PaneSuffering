@@ -41,14 +41,28 @@ export class ScoreSystem {
     this.total += progressDelta * SCRUB_RATE * this.multiplier;
   }
 
-  /** Completion bonus for one pane. Returns the points awarded. */
-  finishPane(spotless: boolean): number {
-    const points = (PANE_BONUS + (spotless ? SPOTLESS_BONUS : 0)) * this.multiplier;
+  /**
+   * Completion bonus for one pane, paid when it reaches the sign-off
+   * threshold. Returns the points awarded.
+   */
+  finishPane(): number {
+    const points = PANE_BONUS * this.multiplier;
     this.total += points;
     this.panesCleaned++;
-    if (spotless) this.spotlessCount++;
     this.streak++;
     this.trackBest();
+    return points;
+  }
+
+  /**
+   * Paid separately when a pane later reaches 100%. Kept apart from
+   * finishPane so a pane that crosses both thresholds in one frame is counted
+   * once for each rather than paid the spotless bonus twice.
+   */
+  finishSpotless(): number {
+    const points = SPOTLESS_BONUS * this.multiplier;
+    this.total += points;
+    this.spotlessCount++;
     return points;
   }
 

@@ -388,17 +388,17 @@ export class GameScene extends Phaser.Scene {
     }
 
     for (const pane of panes) {
-      if (pane.progress >= 0.9 && !pane.bonusPaid) {
+      if (pane.progress >= RULES.floorTarget && !pane.bonusPaid) {
         pane.bonusPaid = true;
-        const points = this.score.finishPane(pane.spotless);
+        const points = this.score.finishPane();
         this.fx.popup(pane.cx, pane.cy, `+${points}`, '#5ce8a0');
         audio.play('chime', { volume: 0.55 });
       }
       if (pane.spotless && !pane.spotlessPaid) {
         pane.spotlessPaid = true;
-        this.score.bonus(160);
+        const points = this.score.finishSpotless();
         this.fx.sparkle(pane.cx, pane.cy);
-        this.fx.popup(pane.cx, pane.cy - 46, 'SPOTLESS +160', '#8fd6ff');
+        this.fx.popup(pane.cx, pane.cy - 46, `SPOTLESS +${points}`, '#8fd6ff');
         audio.play('sparkle', { volume: 0.8 });
       }
     }

@@ -1,31 +1,82 @@
+/** Points per unit of pane progress (a full pane is 1.0 of progress). */
+const SCRUB_RATE = 240;
+const PANE_BONUS = 200;
+const SPOTLESS_BONUS = 160;
+const FLOOR_BASE = 800;
+const FLOOR_DECAY_PER_SEC = 12;
+const FLOOR_FLOOR = 250;
+const CLOSE_SHAVE = 75;
+
+const PANES_PER_STEP = 2;
+const MAX_MULTIPLIER = 5;
+
+/**
+ * Scoring is deliberately weighted towards *finishing* things: scrubbing pays
+ * a trickle, panes and floors pay lumps, and the multiplier only survives if
+ * you never get hit. The result is that playing it safe and playing it fast
+ * are both viable, but playing it sloppy is not.
+ */
 export class ScoreSystem {
-  private score = 0;
+  panesCleaned = 0;
+  spotlessCount = 0;
+  bestMultiplier = 1;
+  floorsCleared = 0;
 
-  addClean(base = 120): void {
-    this.score += base;
+  /** Kept as a float so a slow scrub still accrues; exposed rounded. */
+  private total = 0;
+  /** Panes finished since the last hit. */
+  private streak = 0;
+
+  get value(): number {
+    return Math.round(this.total);
   }
 
-  addHazardSurvive(value = 60): void {
-    this.score += value;
+  get multiplier(): number {
+    return Math.min(MAX_MULTIPLIER, 1 + Math.floor(this.streak / PANES_PER_STEP));
   }
 
-  addMajorBonus(): void {
-    this.score += 500;
+  /** Continuous points for actual cleaning. */
+  addScrub(progressDelta: number): void {
+    if (progressDelta <= 0) return;
+    this.total += progressDelta * SCRUB_RATE * this.multiplier;
   }
 
-  penalizeHit(): void {
-    this.score = Math.max(0, this.score - 85);
+  /** Completion bonus for one pane. Returns the points awarded. */
+  finishPane(spotless: boolean): number {
+    const points = (PANE_BONUS + (spotless ? SPOTLESS_BONUS : 0)) * this.multiplier;
+    this.total += points;
+    this.panesCleaned++;
+    if (spotless) this.spotlessCount++;
+    this.streak++;
+    this.trackBest();
+    return points;
   }
 
-  penalizeInstability(): void {
-    this.score = Math.max(0, this.score - 1);
+  /** Floor clear bonus, decaying with time taken. Returns the points awarded. */
+  finishFloor(floor: number, seconds: number): number {
+    const base = Math.max(FLOOR_FLOOR, FLOOR_BASE - FLOOR_DECAY_PER_SEC * seconds);
+    const points = Math.round(base) * this.multiplier;
+    this.total += points;
+    this.floorsCleared = Math.max(this.floorsCleared, floor + 1);
+    return points;
   }
 
-  addTickEfficiency(deltaSec: number): void {
-    this.score += Math.floor(1.8 * deltaSec);
+  /** Reward for surviving a hazard by a hair. Returns the points awarded. */
+  closeShave(): number {
+    const points = CLOSE_SHAVE * this.multiplier;
+    this.total += points;
+    return points;
   }
 
-  getValue(): number {
-    return this.score;
+  takeDamage(): void {
+    this.streak = 0;
+  }
+
+  bonus(points: number): void {
+    this.total += points;
+  }
+
+  private trackBest(): void {
+    if (this.multiplier > this.bestMultiplier) this.bestMultiplier = this.multiplier;
   }
 }

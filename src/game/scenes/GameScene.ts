@@ -340,7 +340,10 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    if (this.winchReady && intent.winchHeld && this.mode === 'work') {
+    // Not while hanging off the rail: the grab QTE tells you to mash, and the
+    // winch input is one of the things you can mash, so without this the
+    // recovery prompt could send the rig up a floor with you still dangling.
+    if (this.winchReady && intent.winchHeld && this.mode === 'work' && !this.washer.isDown) {
       this.beginAscent();
     }
   }

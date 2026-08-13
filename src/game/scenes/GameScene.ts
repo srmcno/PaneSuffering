@@ -51,6 +51,8 @@ export class GameScene extends Phaser.Scene {
   private endReason = '';
   /** Latched the moment a run ends, so no later frame can re-finish it. */
   private finished = false;
+  /** Set on SHUTDOWN; a stale step must not touch destroyed systems. */
+  private tornDown = false;
   private hudReady = false;
   private readonly pendingToasts: Array<{ text: string; tone: ToastTone }> = [];
   private tutorialStep = 0;
@@ -92,6 +94,7 @@ export class GameScene extends Phaser.Scene {
 
   update(_time: number, deltaMs: number): void {
     // Clamp so a stalled tab cannot teleport the simulation.
+    if (this.tornDown || !this.cameras?.main) return;
     const dt = Math.min(deltaMs / 1000, 1 / 20);
     if (!this.hudReady) this.flushToasts();
     const intent = this.controls.getIntent();
@@ -181,6 +184,7 @@ export class GameScene extends Phaser.Scene {
     this.outcomeTimer = 0;
     this.endReason = '';
     this.finished = false;
+    this.tornDown = false;
     this.hudReady = false;
     this.pendingToasts.length = 0;
     this.tutorialStep = 0;
@@ -197,8 +201,13 @@ export class GameScene extends Phaser.Scene {
   }
 
   private teardown(): void {
+    this.tornDown = true;
     audio.setSqueegee(false, 0);
     audio.setWinch(false);
+    // The audio engine is a shared singleton that outlives this scene: hand it
+    // back idle rather than frozen at whatever the run ended on.
+    audio.stopMusic();
+    audio.setParams({ wind: 0, intensity: 0 });
     this.events.off('resume-request', this.resumeFromPause, this);
     this.events.off('resume', this.resumeFromPause, this);
     this.events.off('restart', this.restartRun, this);
@@ -226,14 +235,16 @@ export class GameScene extends Phaser.Scene {
   }
 
   private restartRun(): void {
-    this.scene.resume();
+    // Deliberately not resuming first: scene.restart() queues a shutdown and
+    // a start, and a resume racing those leaves this scene being stepped
+    // after its cameras are gone.
     this.scene.stop('UIScene');
     this.scene.stop('PauseScene');
     this.scene.restart();
   }
 
   private quitToTitle(): void {
-    this.scene.resume();
+    audio.stopMusic();
     this.scene.stop('UIScene');
     this.scene.stop('PauseScene');
     this.scene.start('TitleScene');
@@ -433,6 +444,12 @@ export class GameScene extends Phaser.Scene {
       audio.play('confirm', { volume: 0.8 });
       this.fx.banner('FLOOR CLEAR', '#5ce8a0', `${this.prompt('winch')} to winch up`);
       this.toast(`Floor signed off. ${this.prompt('winch')} to winch up to the next one.`, 'good');
+    } else if (progress < RULES.floorTarget && this.winchReady) {
+      // A pigeon fouling a finished pane has to actually cost something, or
+      // the hazard is toothless exactly when it is most likely to fire.
+      this.winchReady = false;
+      audio.play('buzz', { volume: 0.5 });
+      this.toast('Sign-off revoked — that pane needs doing again.', 'warn');
     }
   }
 
@@ -469,7 +486,7 @@ export class GameScene extends Phaser.Scene {
         touch: this.controls.touchActive,
       });
     } else {
-      this.events.emit('grab', { active: false, progress: 0, timeLeft: 0, touch: this.controls.touchActive });
+      this.clearGrab();
     }
 
     if (
@@ -484,6 +501,14 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  /**
+   * The hang overlay is emitted from updateFeedback, which the terminal modes
+   * never reach — so every path out of gameplay has to dismiss it explicitly.
+   */
+  private clearGrab(): void {
+    this.events.emit('grab', { active: false, progress: 0, timeLeft: 0, touch: this.controls.touchActive });
+  }
+
   private checkFailure(): void {
     // Hazards resolve before the finale's win check, so a hit can zero health
     // on the very frame the run is won. The completed run wins that race.
@@ -494,6 +519,7 @@ export class GameScene extends Phaser.Scene {
     }
     if (this.washer.health <= 0 && this.mode !== 'dying') {
       this.mode = 'dying';
+      this.clearGrab();
       this.outcomeTimer = 1.5;
       this.endReason = 'Stretchered off with a full complement of workplace injuries.';
       audio.setSqueegee(false, 0);
@@ -509,6 +535,7 @@ export class GameScene extends Phaser.Scene {
 
   private beginFallSequence(): void {
     this.mode = 'falling';
+    this.clearGrab();
     this.outcomeTimer = 4.5;
     this.endReason = 'Left the building the quick way.';
     audio.setSqueegee(false, 0);

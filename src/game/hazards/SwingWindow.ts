@@ -17,6 +17,7 @@ export class SwingWindow implements Hazard {
   alive = true;
 
   private readonly gfx: Phaser.GameObjects.Graphics;
+  private readonly back: Phaser.GameObjects.Graphics;
   private readonly glow: Phaser.GameObjects.Image;
   private readonly pane: WindowPane;
   private readonly dir: -1 | 1;
@@ -36,6 +37,9 @@ export class SwingWindow implements Hazard {
     this.throwsSomething = Math.random() < 0.35;
 
     this.gfx = scene.add.graphics().setDepth(DEPTH.hazard);
+    // The opening is a hole in the building, so it belongs behind the rig and
+    // the washer; only the leaf itself is out here in front of them.
+    this.back = scene.add.graphics().setDepth(DEPTH.hazardBack);
     this.glow = scene.add
       .image(pane.cx, pane.cy, 'glow')
       .setDisplaySize(PANE.width * 2.2, PANE.height * 2.2)
@@ -104,6 +108,7 @@ export class SwingWindow implements Hazard {
 
   destroy(): void {
     this.gfx.destroy();
+    this.back.destroy();
     this.glow.destroy();
     this.alive = false;
   }
@@ -163,16 +168,18 @@ export class SwingWindow implements Hazard {
 
   private draw(ctx: HazardContext): void {
     const g = this.gfx;
+    const b = this.back;
     g.clear();
+    b.clear();
     if (this.open <= 0.001) return;
 
     const c = this.corners();
 
     // Dark opening left behind the leaf.
-    g.fillStyle(0x05070d, Math.min(1, this.open * 1.3));
-    g.fillRect(this.pane.cx - PANE.width / 2, this.pane.cy - PANE.height / 2, PANE.width, PANE.height);
-    g.fillStyle(0xffd9a0, 0.14 * this.open);
-    g.fillRect(this.pane.cx - PANE.width / 2, this.pane.cy - PANE.height / 2, PANE.width, PANE.height * 0.35);
+    b.fillStyle(0x05070d, Math.min(1, this.open * 1.3));
+    b.fillRect(this.pane.cx - PANE.width / 2, this.pane.cy - PANE.height / 2, PANE.width, PANE.height);
+    b.fillStyle(0xffd9a0, 0.14 * this.open);
+    b.fillRect(this.pane.cx - PANE.width / 2, this.pane.cy - PANE.height / 2, PANE.width, PANE.height * 0.35);
 
     // The leaf: dark frame, tinted glass, a raking highlight.
     g.fillStyle(0x0a0e16, 1);

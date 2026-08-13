@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { CSS, FONT, PALETTE, VIEW } from '../config';
 import { audio } from '../audio/AudioEngine';
+import { onKeyPress } from '../core/keys';
 import type { RunSummary } from '../types/GameTypes';
 
 interface MenuEntry {
@@ -501,17 +502,10 @@ export class GameOverScene extends Phaser.Scene {
     const kb = this.input.keyboard;
     if (!kb) return;
     kb.on('keydown', () => audio.unlock());
-    kb.on('keydown-LEFT', () => this.select(this.index - 1));
-    kb.on('keydown-A', () => this.select(this.index - 1));
-    kb.on('keydown-UP', () => this.select(this.index - 1));
-    kb.on('keydown-W', () => this.select(this.index - 1));
-    kb.on('keydown-RIGHT', () => this.select(this.index + 1));
-    kb.on('keydown-D', () => this.select(this.index + 1));
-    kb.on('keydown-DOWN', () => this.select(this.index + 1));
-    kb.on('keydown-S', () => this.select(this.index + 1));
-    kb.on('keydown-ENTER', () => this.activate());
-    kb.on('keydown-SPACE', () => this.activate());
-    kb.on('keydown-ESC', () => this.leave('TitleScene'));
+    onKeyPress(kb, ['LEFT', 'A', 'UP', 'W'], () => this.select(this.index - 1));
+    onKeyPress(kb, ['RIGHT', 'D', 'DOWN', 'S'], () => this.select(this.index + 1));
+    onKeyPress(kb, ['ENTER', 'SPACE'], () => this.activate());
+    onKeyPress(kb, 'ESC', () => this.leave('TitleScene'));
   }
 
   update(): void {

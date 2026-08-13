@@ -18,6 +18,7 @@ export class Defenestration implements Hazard {
   phase: Phase = 'shout';
 
   private readonly gfx: Phaser.GameObjects.Graphics;
+  private readonly back: Phaser.GameObjects.Graphics;
   private readonly glow: Phaser.GameObjects.Image;
   private readonly pane: WindowPane;
   private t = 0;
@@ -41,6 +42,9 @@ export class Defenestration implements Hazard {
   ) {
     this.pane = pane;
     this.gfx = scene.add.graphics().setDepth(DEPTH.hazard);
+    // Cracks and the empty frame are part of the building, so they draw behind
+    // the rig; only the body coming through it is in front.
+    this.back = scene.add.graphics().setDepth(DEPTH.hazardBack);
     this.glow = scene.add
       .image(pane.cx, pane.cy, 'glow')
       .setDisplaySize(PANE.width * 2.6, PANE.height * 2.6)
@@ -83,6 +87,7 @@ export class Defenestration implements Hazard {
 
   destroy(): void {
     this.gfx.destroy();
+    this.back.destroy();
     this.glow.destroy();
     this.alive = false;
   }
@@ -212,7 +217,8 @@ export class Defenestration implements Hazard {
   }
 
   private draw(): void {
-    const g = this.gfx;
+    const g = this.back;
+    this.gfx.clear();
     g.clear();
 
     if (this.phase === 'shout') {
@@ -241,7 +247,7 @@ export class Defenestration implements Hazard {
       }
     }
 
-    if (this.bodyLive) this.drawBody(g);
+    if (this.bodyLive) this.drawBody(this.gfx);
   }
 
   /** A tumbling executive: suit, tie, and an expression of deep surprise. */

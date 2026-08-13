@@ -3,6 +3,7 @@ import { CSS, DEPTH, FONT, PALETTE, VIEW } from '../config';
 import { Rng } from '../core/Rng';
 import { Backdrop } from '../world/Backdrop';
 import { audio } from '../audio/AudioEngine';
+import { onKeyPress } from '../core/keys';
 import { Save } from '../systems/Save';
 
 interface MenuEntry {
@@ -620,18 +621,15 @@ export class TitleScene extends Phaser.Scene {
     if (!kb) return;
     // WebAudio will not start outside a gesture; every key press is one.
     kb.on('keydown', () => audio.unlock());
-    kb.on('keydown-UP', () => this.select(this.index - 1));
-    kb.on('keydown-W', () => this.select(this.index - 1));
-    kb.on('keydown-DOWN', () => this.select(this.index + 1));
-    kb.on('keydown-S', () => this.select(this.index + 1));
-    kb.on('keydown-ENTER', () => this.activate());
-    kb.on('keydown-SPACE', () => this.activate());
-    kb.on('keydown-M', () => {
+    onKeyPress(kb, ['UP', 'W'], () => this.select(this.index - 1));
+    onKeyPress(kb, ['DOWN', 'S'], () => this.select(this.index + 1));
+    onKeyPress(kb, ['ENTER', 'SPACE'], () => this.activate());
+    onKeyPress(kb, 'M', () => {
       audio.toggleMute();
       audio.play('click');
       this.refreshLabels();
     });
-    kb.on('keydown-ESC', () => {
+    onKeyPress(kb, 'ESC', () => {
       if (this.panelOpen) this.toggleControls();
     });
   }

@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { CSS, FONT, PALETTE, VIEW } from '../config';
 import { audio } from '../audio/AudioEngine';
+import { onKeyPress } from '../core/keys';
 
 interface MenuEntry {
   text: Phaser.GameObjects.Text;
@@ -320,19 +321,15 @@ export class PauseScene extends Phaser.Scene {
   private bindInput(): void {
     const kb = this.input.keyboard;
     if (!kb) return;
-    kb.on('keydown-UP', () => this.select(this.index - 1));
-    kb.on('keydown-W', () => this.select(this.index - 1));
-    kb.on('keydown-DOWN', () => this.select(this.index + 1));
-    kb.on('keydown-S', () => this.select(this.index + 1));
-    kb.on('keydown-ENTER', () => this.activate());
-    kb.on('keydown-SPACE', () => this.activate());
-    kb.on('keydown-M', () => {
+    onKeyPress(kb, ['UP', 'W'], () => this.select(this.index - 1));
+    onKeyPress(kb, ['DOWN', 'S'], () => this.select(this.index + 1));
+    onKeyPress(kb, ['ENTER', 'SPACE'], () => this.activate());
+    onKeyPress(kb, 'M', () => {
       audio.toggleMute();
       audio.play('click');
       this.refreshLabels();
     });
-    kb.on('keydown-ESC', () => this.close('resume'));
-    kb.on('keydown-P', () => this.close('resume'));
+    onKeyPress(kb, ['ESC', 'P'], () => this.close('resume'));
   }
 
   update(): void {

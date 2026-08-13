@@ -46,6 +46,8 @@ export class GameScene extends Phaser.Scene {
   private soap: number = RULES.soapCapacity;
   private safetyCooldown = 0;
   private winchReady = false;
+  /** Latches the penthouse revocation toast so it fires once per fouling. */
+  private penthouseFouled = false;
   private alarmTimer = 0;
   private outcomeTimer = 0;
   private endReason = '';
@@ -180,6 +182,7 @@ export class GameScene extends Phaser.Scene {
     this.soap = RULES.soapCapacity;
     this.safetyCooldown = 0;
     this.winchReady = false;
+    this.penthouseFouled = false;
     this.alarmTimer = 0;
     this.outcomeTimer = 0;
     this.endReason = '';
@@ -428,13 +431,25 @@ export class GameScene extends Phaser.Scene {
   }
 
   private updateFloorGoal(): void {
-    if (this.mode !== 'work') return;
+    // The penthouse keeps being scored during the set-piece, so 'finale' has
+    // to be watched too: pigeons still spawn while the building comes apart.
+    if (this.mode !== 'work' && this.mode !== 'finale') return;
     const progress = this.tower.floorProgress(this.floor);
 
     if (this.floor >= FLOOR_COUNT - 1) {
-      if (progress >= RULES.floorTarget && !this.hazards.finaleActive && !this.hazards.finaleComplete) {
+      const signedOff = progress >= RULES.floorTarget;
+      if (signedOff && !this.hazards.finaleActive && !this.hazards.finaleComplete) {
         this.mode = 'finale';
         this.hazards.startFinale(this.hazardContext());
+      }
+      if (signedOff) {
+        this.penthouseFouled = false;
+      } else if (this.mode === 'finale' && !this.penthouseFouled) {
+        // Same rule as every other floor: you do not clock off on a floor
+        // that is no longer signed off, however loud the finale is.
+        this.penthouseFouled = true;
+        audio.play('buzz', { volume: 0.5 });
+        this.toast('Sign-off revoked — finish the glass before you clock off.', 'warn');
       }
       return;
     }
@@ -493,7 +508,8 @@ export class GameScene extends Phaser.Scene {
       this.mode === 'finale' &&
       this.hazards.finaleComplete &&
       this.washer.health > 0 &&
-      this.washer.state !== 'fall'
+      this.washer.state !== 'fall' &&
+      this.tower.floorProgress(this.floor) >= RULES.floorTarget
     ) {
       this.floorsCleared = FLOOR_COUNT;
       this.score.bonus(1500);

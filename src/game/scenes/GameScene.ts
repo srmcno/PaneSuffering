@@ -466,9 +466,10 @@ export class GameScene extends Phaser.Scene {
         active: true,
         progress: this.washer.hangTaps / RULES.grabTaps,
         timeLeft: Math.max(0, this.washer.hangTimer),
+        touch: this.controls.touchActive,
       });
     } else {
-      this.events.emit('grab', { active: false, progress: 0, timeLeft: 0 });
+      this.events.emit('grab', { active: false, progress: 0, timeLeft: 0, touch: this.controls.touchActive });
     }
 
     if (

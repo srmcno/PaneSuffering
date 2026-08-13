@@ -11,6 +11,8 @@ interface GrabPayload {
   active: boolean;
   progress: number;
   timeLeft: number;
+  /** Touch pads are driving the run, so the prompt must not name a key. */
+  touch: boolean;
 }
 
 const CX = VIEW.W / 2;
@@ -90,7 +92,7 @@ export class UIScene extends Phaser.Scene {
   private src!: Phaser.Events.EventEmitter;
 
   private hud: HudState = { ...IDLE_HUD };
-  private grab: GrabPayload = { active: false, progress: 0, timeLeft: 0 };
+  private grab: GrabPayload = { active: false, progress: 0, timeLeft: 0, touch: false };
 
   /** Smoothed mirrors of the raw state, so readouts glide instead of snapping. */
   private scoreShown = 0;
@@ -141,7 +143,7 @@ export class UIScene extends Phaser.Scene {
 
   create(): void {
     this.hud = { ...IDLE_HUD };
-    this.grab = { active: false, progress: 0, timeLeft: 0 };
+    this.grab = { active: false, progress: 0, timeLeft: 0, touch: false };
     this.scoreShown = 0;
     this.healthShown = 1;
     this.progressShown = 0;
@@ -221,6 +223,7 @@ export class UIScene extends Phaser.Scene {
 
   private onGrab(payload: GrabPayload): void {
     this.grab = payload;
+    this.grabTitle.setText(payload.touch ? 'MASH ANY PAD' : 'MASH SPACE');
     if (payload.active === this.grabVisible) return;
     this.grabVisible = payload.active;
 

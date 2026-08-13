@@ -32,6 +32,7 @@ export class Defenestration implements Hazard {
   private bodySpin = 0;
   private bodyLive = false;
   private bodyHitDone = false;
+  private bodyBounced = false;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -169,7 +170,14 @@ export class Defenestration implements Hazard {
     const cos = Math.cos(ctx.sim.angle) || 1;
     const offset = (this.bodyX - ctx.sim.worldX) / cos;
     const deckPoint = ctx.sim.pointAt(Phaser.Math.Clamp(offset, -420, 420), 0);
-    if (this.bodyVY > 0 && this.bodyY > deckPoint.y - 20 && this.bodyY < deckPoint.y + 30 && Math.abs(offset) < 430) {
+    if (
+      !this.bodyBounced &&
+      this.bodyVY > 0 &&
+      this.bodyY > deckPoint.y - 20 &&
+      this.bodyY < deckPoint.y + 30 &&
+      Math.abs(offset) < 430
+    ) {
+      this.bodyBounced = true;
       this.bodyVY = -this.bodyVY * 0.35;
       this.bodyVX *= 1.2;
       ctx.sim.addImpulse(offset * 0.05);

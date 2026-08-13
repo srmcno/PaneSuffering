@@ -83,9 +83,6 @@ export class TouchControls {
   };
 
   constructor(private readonly scene: Phaser.Scene) {
-    // Two pointers exist by default; the pads need mouse + three fingers.
-    scene.input.addPointer(3);
-
     for (const spec of PAD_SPECS) this.pads.push(this.buildPad(spec));
 
     scene.input.on(Phaser.Input.Events.POINTER_UP, this.onGlobalRelease);

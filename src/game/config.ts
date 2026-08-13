@@ -234,5 +234,9 @@ export const GAME_CONFIG: Phaser.Types.Core.GameConfig = {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
   },
+  // Touch pointers are allocated once for the whole game. Adding them from a
+  // scene instead leaks a few on every restart, since the InputManager keeps
+  // the ones it already has and silently caps the total at ten.
+  input: { activePointers: 4 },
   fps: { target: 60, min: 30 },
 };

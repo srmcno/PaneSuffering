@@ -1,121 +1,213 @@
 import Phaser from 'phaser';
-import { Player } from '../entities/Player';
-import { Rig } from '../entities/Rig';
+import { FLOOR_COUNT } from '../config';
+import { audio } from '../audio/AudioEngine';
 import { Debris } from '../hazards/Debris';
-import { OpenWindowHazard } from '../hazards/OpenWindowHazard';
+import { Defenestration } from '../hazards/Defenestration';
+import { Hazard, HazardContext } from '../hazards/Hazard';
 import { Pigeon } from '../hazards/Pigeon';
-import { LevelDirector } from './LevelDirector';
+import { Projectile } from '../hazards/Projectile';
+import { SwingWindow } from '../hazards/SwingWindow';
+import { DeckLoad } from './RigSim';
 
+interface HurlEvent {
+  x: number;
+  y: number;
+  vx: number;
+}
+
+const MAX_CONCURRENT = 5;
+
+/**
+ * Decides what goes wrong and when. Everything it spawns is telegraphed, the
+ * concurrent count is capped, and the rate is cut while the rig is in transit,
+ * so escalation stays legible instead of just becoming noise.
+ */
 export class HazardDirector {
-  private pigeons: Pigeon[] = [];
-  private debris: Debris[] = [];
-  private openWindows: OpenWindowHazard[] = [];
-  private spawnTimer = 0;
-  public warningText = '';
-  public survivedSetPiece = false;
-  private setPieceState: 'idle' | 'warning' | 'impact' | 'recover' = 'idle';
-  private setPieceTimer = 0;
+  /** Signed wind strength, -1..1, surfaced to the HUD. */
+  wind = 0;
 
-  constructor(private readonly scene: Phaser.Scene, private readonly level: LevelDirector, private readonly rig: Rig, private readonly player: Player) {}
+  private hazards: Hazard[] = [];
+  private spawnTimer = 4.5;
+  private gustTimer = 9;
+  private gustPhase: 'idle' | 'warn' | 'blow' = 'idle';
+  private gustT = 0;
+  private gustDir: -1 | 1 = 1;
+  private gustPower = 0;
+  private drift = 0;
+  private noiseT = Math.random() * 100;
+  private finale: Defenestration | null = null;
+  private finaleFired = false;
 
-  update(deltaSec: number): number {
-    this.spawnTimer -= deltaSec;
-    let hits = 0;
-
-    if (this.spawnTimer <= 0) {
-      this.spawnRoutine();
-      this.spawnTimer = Phaser.Math.Between(2, 5) - this.level.phase * 0.45;
-    }
-
-    this.pigeons = this.pigeons.filter((p) => {
-      p.update(deltaSec);
-      return p.alive;
-    });
-
-    this.debris = this.debris.filter((d) => {
-      d.update();
-      if (!d.alive) return false;
-      const dist = Phaser.Math.Distance.Between(d.body.x, d.body.y, this.player.body.x, this.player.body.y);
-      if (dist < 34 && !this.player.isDucking) {
-        this.player.hurt(12);
-        hits += 1;
-        d.alive = false;
-        d.body.destroy();
-        return false;
-      }
-      const rigDist = Phaser.Math.Distance.Between(d.body.x, d.body.y, this.rig.body.x, this.rig.body.y);
-      if (rigDist < 130) {
-        this.rig.nudge((d.body.x > this.rig.body.x ? 1 : -1) * 0.0012, -0.0007);
-      }
-      return true;
-    });
-
-    this.openWindows = this.openWindows.filter((w) => {
-      const gotHit = w.update(deltaSec, this.player);
-      if (gotHit) hits += 1;
-      return w.alive;
-    });
-
-    this.updateSetPiece(deltaSec);
-    return hits;
+  constructor(private readonly scene: Phaser.Scene) {
+    scene.events.on('hazard:hurl', this.onHurl, this);
   }
 
-  private spawnRoutine(): void {
-    const roll = Math.random();
-    if (roll < 0.22 + this.level.phase * 0.04) {
-      this.pigeons.push(new Pigeon(this.scene, this.rig));
-    } else if (roll < 0.5) {
-      this.debris.push(new Debris(this.scene, Phaser.Math.Between(330, 970), this.rig.body.y - 460));
-    } else if (roll < 0.72) {
-      const side: -1 | 1 = Math.random() > 0.5 ? 1 : -1;
-      const x = side === 1 ? 1000 : 200;
-      const y = Phaser.Math.Between(this.rig.body.y - 180, this.rig.body.y + 80);
-      this.openWindows.push(new OpenWindowHazard(this.scene, x, y, side));
-    } else if (roll < 0.88) {
-      // wind gust
-      const dir = Math.random() > 0.5 ? 1 : -1;
-      this.rig.nudge(dir * (0.0012 + this.level.phase * 0.0007));
-      this.warningText = 'WIND GUST!';
-      this.scene.time.delayedCall(700, () => (this.warningText = ''));
+  get finaleActive(): boolean {
+    return this.finale !== null;
+  }
+
+  get finaleComplete(): boolean {
+    return this.finaleFired && this.finale === null;
+  }
+
+  /** Loads that hazards are currently putting on the deck. */
+  get deckLoads(): DeckLoad[] {
+    const loads: DeckLoad[] = [];
+    for (const h of this.hazards) if (h.load) loads.push(h.load);
+    return loads;
+  }
+
+  update(dt: number, ctx: HazardContext, ascending: boolean): void {
+    this.updateWind(dt, ctx);
+
+    if (!ascending) {
+      this.spawnTimer -= dt * (this.finale?.stormActive ? 3.4 : 1);
+      if (this.spawnTimer <= 0) {
+        this.spawn(ctx);
+        this.spawnTimer = this.nextInterval(ctx.floor);
+      }
     } else {
-      // poop splat => slippery platform
-      this.rig.makeSlippery(3.5);
-      this.warningText = 'BIRD POOP: SLIPPERY RIG';
-      this.scene.time.delayedCall(900, () => (this.warningText = ''));
+      this.spawnTimer = Math.max(this.spawnTimer, 1.4);
+    }
+
+    // Snapshot first: a hazard can spawn another through the event bus, and
+    // for..of would step the newcomer on the frame it was created.
+    for (const hazard of this.hazards.slice()) hazard.update(dt, ctx);
+
+    const survivors: Hazard[] = [];
+    for (const hazard of this.hazards) {
+      if (hazard.alive) survivors.push(hazard);
+      else if (hazard === this.finale) this.finale = null;
+    }
+    this.hazards = survivors;
+  }
+
+  /** Fires the penthouse set-piece. Safe to call more than once. */
+  startFinale(ctx: HazardContext): void {
+    if (this.finaleFired) return;
+    this.finaleFired = true;
+    const panes = ctx.tower.panesOnFloor(ctx.floor);
+    const pane = panes[Math.min(panes.length - 1, Math.max(0, Math.floor(panes.length / 2)))];
+    if (!pane) return;
+    this.finale = new Defenestration(this.scene, ctx, pane);
+    this.hazards.push(this.finale);
+  }
+
+  clear(): void {
+    this.scene.events.off('hazard:hurl', this.onHurl, this);
+    for (const hazard of this.hazards) hazard.destroy();
+    this.hazards = [];
+    this.finale = null;
+  }
+
+  /* ------------------------------------------------------------------ wind */
+
+  private updateWind(dt: number, ctx: HazardContext): void {
+    this.noiseT += dt;
+    // Layered sines read as gentle, unrepeating weather without a noise table.
+    this.drift =
+      Math.sin(this.noiseT * 0.31) * 0.42 +
+      Math.sin(this.noiseT * 0.13 + 1.7) * 0.3 +
+      Math.sin(this.noiseT * 0.72 + 3.1) * 0.12;
+
+    const altitude = ctx.floor / Math.max(1, FLOOR_COUNT - 1);
+
+    switch (this.gustPhase) {
+      case 'idle':
+        this.gustTimer -= dt;
+        if (this.gustTimer <= 0) {
+          this.gustPhase = 'warn';
+          this.gustT = 0;
+          this.gustDir = Math.random() < 0.5 ? -1 : 1;
+          this.gustPower = 0.55 + altitude * 0.75;
+          audio.play('gust', { volume: 0.5 });
+          ctx.fx.banner('GUST INCOMING', '#8fd6ff', this.gustDir > 0 ? 'from the west' : 'from the east');
+        }
+        break;
+
+      case 'warn':
+        this.gustT += dt;
+        if (this.gustT > 1.15) {
+          this.gustPhase = 'blow';
+          this.gustT = 0;
+          audio.play('gust', { volume: 0.95 });
+          ctx.fx.windStreaks(this.gustDir, this.gustPower);
+          ctx.sim.addSwayImpulse(this.gustDir * 70 * this.gustPower);
+          ctx.sim.addImpulse(this.gustDir * 14 * this.gustPower);
+        }
+        break;
+
+      case 'blow': {
+        this.gustT += dt;
+        if (Math.random() < dt * 3) ctx.fx.windStreaks(this.gustDir, this.gustPower * 0.6);
+        if (this.gustT > 1.8) {
+          this.gustPhase = 'idle';
+          this.gustTimer = Phaser.Math.FloatBetween(11, 18) - altitude * 5;
+        }
+        break;
+      }
+    }
+
+    const gustNow =
+      this.gustPhase === 'blow' ? this.gustDir * this.gustPower * (1 - this.gustT / 1.8) : 0;
+    this.wind = Phaser.Math.Clamp(this.drift * (0.25 + altitude * 0.55) + gustNow, -1.4, 1.4);
+
+    // Wind pushes the platform sideways and twists it a little.
+    ctx.sim.addForce(this.wind * (60 + altitude * 110));
+    ctx.sim.addTorque(this.wind * (3 + altitude * 7));
+  }
+
+  /* ---------------------------------------------------------------- spawns */
+
+  private nextInterval(floor: number): number {
+    const t = floor / Math.max(1, FLOOR_COUNT - 1);
+    const base = Phaser.Math.Linear(4.6, 2.0, t);
+    return base * Phaser.Math.FloatBetween(0.72, 1.3);
+  }
+
+  private spawn(ctx: HazardContext): void {
+    if (this.hazards.length >= MAX_CONCURRENT) return;
+
+    const f = ctx.floor;
+    const options: Array<{ weight: number; make: () => Hazard | null }> = [
+      {
+        weight: 3.2 - f * 0.12,
+        make: () => new Pigeon(this.scene, ctx),
+      },
+      {
+        weight: 2 + f * 0.45,
+        make: () => new Debris(this.scene, ctx, false),
+      },
+      {
+        weight: f < 2 ? 0 : (f - 1) * 0.62,
+        make: () => new Debris(this.scene, ctx, true),
+      },
+      {
+        weight: f < 1 ? 0 : 1.4 + f * 0.38,
+        make: () => {
+          const panes = ctx.tower.panesOnFloor(f);
+          if (panes.length === 0) return null;
+          return new SwingWindow(this.scene, ctx, panes[Phaser.Math.Between(0, panes.length - 1)]);
+        },
+      },
+    ];
+
+    const total = options.reduce((sum, o) => sum + Math.max(0, o.weight), 0);
+    if (total <= 0) return;
+
+    let roll = Math.random() * total;
+    for (const option of options) {
+      roll -= Math.max(0, option.weight);
+      if (roll <= 0) {
+        const hazard = option.make();
+        if (hazard) this.hazards.push(hazard);
+        return;
+      }
     }
   }
 
-  private updateSetPiece(deltaSec: number): void {
-    if (this.level.shouldTriggerSetPiece() && this.setPieceState === 'idle') {
-      this.setPieceState = 'warning';
-      this.setPieceTimer = 2.4;
-      this.warningText = 'Muffled screaming... window cracking!';
-    }
-
-    if (this.setPieceState === 'idle') return;
-
-    this.setPieceTimer -= deltaSec;
-    if (this.setPieceState === 'warning' && this.setPieceTimer <= 0) {
-      this.setPieceState = 'impact';
-      this.setPieceTimer = 0.1;
-      const human = this.scene.matter.add.image(this.rig.body.x + 340, this.rig.body.y - 260, 'dummy');
-      human.setRectangle(26, 46);
-      human.setMass(7);
-      human.setVelocity(-14, 7);
-      this.rig.nudge(-0.012, -0.004);
-      this.scene.cameras.main.shake(300, 0.01);
-      this.warningText = 'SET-PIECE: SURVIVE THE AFTERMATH!';
-      this.scene.time.delayedCall(1500, () => human.destroy());
-    } else if (this.setPieceState === 'impact' && this.setPieceTimer <= 0) {
-      this.setPieceState = 'recover';
-      this.setPieceTimer = 6;
-      for (let i = 0; i < 8; i++) {
-        this.debris.push(new Debris(this.scene, this.rig.body.x + Phaser.Math.Between(-150, 150), this.rig.body.y - 240));
-      }
-    } else if (this.setPieceState === 'recover' && this.setPieceTimer <= 0) {
-      this.setPieceState = 'idle';
-      this.warningText = '';
-      this.survivedSetPiece = true;
-    }
+  private onHurl(data: HurlEvent): void {
+    if (this.hazards.length >= MAX_CONCURRENT + 2) return;
+    this.hazards.push(new Projectile(this.scene, data.x, data.y, data.vx));
   }
 }

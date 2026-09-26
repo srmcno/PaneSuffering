@@ -1,3 +1,5 @@
+import type { PerkId } from '../systems/Perks';
+
 export interface InputIntent {
   /** -1 left, 0 none, 1 right. */
   move: -1 | 0 | 1;
@@ -30,6 +32,8 @@ export interface HudState {
   elapsed: number;
   /** Touch pads are driving the run, so prompts must not name keys. */
   touch: boolean;
+  /** Upgrades owned this run, in pick order. */
+  perks: Array<{ id: PerkId; stacks: number }>;
 }
 
 export type ToastTone = 'info' | 'warn' | 'good';
@@ -46,4 +50,6 @@ export interface RunSummary {
   bestMultiplier: number;
   timeSeconds: number;
   reason: string;
+  /** Upgrades signed for during the run. */
+  perks?: Array<{ id: PerkId; stacks: number }>;
 }

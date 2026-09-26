@@ -21,9 +21,22 @@ import { InputSystem } from '../systems/InputSystem';
 import { RigSim } from '../systems/RigSim';
 import { Save } from '../systems/Save';
 import { ScoreSystem } from '../systems/ScoreSystem';
+import { PerkId, PerkState, PERKS } from '../systems/Perks';
 import { HudState, InputIntent, RunSummary, ToastTone } from '../types/GameTypes';
 import { Backdrop } from '../world/Backdrop';
 import { Tower } from '../world/Tower';
+
+/** Who is on the other side of the glass, floor by floor. */
+const DEPARTMENTS = [
+  'accounts receivable',
+  'human resources',
+  'legal',
+  'compliance',
+  'marketing',
+  'mergers & acquisitions',
+  'the board room',
+  'the penthouse',
+];
 
 type Mode = 'work' | 'ascend' | 'finale' | 'dying' | 'falling' | 'over';
 
@@ -43,6 +56,8 @@ export class GameScene extends Phaser.Scene {
   private floorsCleared = 0;
   private floorStart = 0;
   private elapsed = 0;
+  private perks = new PerkState();
+  private wasHanging = false;
   private soap: number = RULES.soapCapacity;
   private safetyCooldown = 0;
   private winchReady = false;
@@ -94,6 +109,7 @@ export class GameScene extends Phaser.Scene {
     audio.unlock();
     audio.startMusic();
     this.toast(`Floor 41. Four panes. ${this.prompt('clean')} to work the squeegee.`, 'info');
+    this.time.delayedCall(500, () => this.fx.banner('FLOOR 41', '#f6b73c', DEPARTMENTS[0]));
   }
 
   update(_time: number, deltaMs: number): void {
@@ -144,7 +160,8 @@ export class GameScene extends Phaser.Scene {
     this.hazards.update(dt, ctx, this.mode === 'ascend');
 
     const loads = this.hazards.deckLoads;
-    loads.push(this.washer.load);
+    const own = this.washer.load;
+    loads.push({ offset: own.offset, mass: own.mass * this.perks.tiltScale });
     this.sim.update(dt, loads, this.washer.brace, 0);
 
     this.washer.update(dt, this.sim, intent, {
@@ -181,6 +198,8 @@ export class GameScene extends Phaser.Scene {
     this.floorsCleared = 0;
     this.floorStart = 0;
     this.elapsed = 0;
+    this.perks = new PerkState();
+    this.wasHanging = false;
     this.soap = RULES.soapCapacity;
     this.safetyCooldown = 0;
     this.winchReady = false;
@@ -200,6 +219,7 @@ export class GameScene extends Phaser.Scene {
 
   private wireSceneEvents(): void {
     this.events.on('resume-request', this.resumeFromPause, this);
+    this.events.on('perk-chosen', this.onPerkChosen, this);
     this.events.on('resume', this.resumeFromPause, this);
     this.events.on('restart', this.restartRun, this);
     this.events.on('quit', this.quitToTitle, this);
@@ -215,6 +235,7 @@ export class GameScene extends Phaser.Scene {
     audio.stopMusic();
     audio.setParams({ wind: 0, intensity: 0 });
     this.events.off('resume-request', this.resumeFromPause, this);
+    this.events.off('perk-chosen', this.onPerkChosen, this);
     this.events.off('resume', this.resumeFromPause, this);
     this.events.off('restart', this.restartRun, this);
     this.events.off('quit', this.quitToTitle, this);
@@ -224,6 +245,40 @@ export class GameScene extends Phaser.Scene {
     this.tower?.destroy();
     this.rig?.destroy();
     this.washer?.destroy();
+  }
+
+  private get soapCapacity(): number {
+    return RULES.soapCapacity * this.perks.soapCapacityScale;
+  }
+
+  /** Between floors the player drafts one upgrade while the winch waits. */
+  private openDraft(): void {
+    const offers = this.perks.draft(this.washer.health, RULES.maxHealth);
+    if (offers.length === 0) return;
+    audio.setSqueegee(false, 0);
+    this.controls.reset();
+    this.scene.pause();
+    this.scene.launch('PerkScene', {
+      offers,
+      stacks: offers.map((id) => this.perks.count(id)),
+      floor: this.floor,
+      touch: this.controls.touchActive,
+    });
+  }
+
+  private onPerkChosen(id: PerkId): void {
+    this.perks.add(id);
+    this.score.scale = this.perks.scoreScale;
+    this.hazards.pigeonScale = this.perks.pigeonScale;
+    if (id === 'firstAid') {
+      this.washer.health = Math.min(RULES.maxHealth, this.washer.health + 40);
+    }
+    if (id === 'bucket') this.soap = this.soapCapacity;
+    const def = PERKS[id];
+    this.fx.popup(this.sim.worldX, this.sim.surfaceY - 170, def.name, '#' + def.color.toString(16).padStart(6, '0'));
+    audio.play('confirm', { volume: 0.7 });
+    this.controls.reset();
+    this.scene.resume();
   }
 
   private openPause(): void {
@@ -246,6 +301,7 @@ export class GameScene extends Phaser.Scene {
     // after its cameras are gone.
     this.scene.stop('UIScene');
     this.scene.stop('PauseScene');
+    this.scene.stop('PerkScene');
     this.scene.restart();
   }
 
@@ -253,6 +309,7 @@ export class GameScene extends Phaser.Scene {
     audio.stopMusic();
     this.scene.stop('UIScene');
     this.scene.stop('PauseScene');
+    this.scene.stop('PerkScene');
     this.scene.start('TitleScene');
   }
 
@@ -290,6 +347,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private onHit(damage: number, knock: number, source: string): void {
+    damage = Math.max(1, Math.round(damage * this.perks.damageScale));
     if (!this.washer.hurt(damage, knock)) return;
     this.score.takeDamage();
     this.fx.shake(Math.min(1, damage / 26), 220);
@@ -310,7 +368,7 @@ export class GameScene extends Phaser.Scene {
     this.safetyCooldown = Math.max(0, this.safetyCooldown - dt);
     if (!intent.safetyPressed || this.safetyCooldown > 0) return;
 
-    this.safetyCooldown = RULES.safetyLineCooldown;
+    this.safetyCooldown = RULES.safetyLineCooldown * this.perks.safetyCooldownScale;
     // Snap the deck level, kill the swing, and grant a moment of grace.
     this.sim.angVel *= 0.08;
     this.sim.angle *= 0.3;
@@ -332,12 +390,16 @@ export class GameScene extends Phaser.Scene {
         this.floorStart = this.elapsed;
         audio.setWinch(false);
         audio.play('thud', { volume: 0.5, detune: 120 });
-        this.toast(`Floor ${41 + this.floor}. ${PANE.perFloor} panes.`, 'info');
+        this.fx.banner(`FLOOR ${41 + this.floor}`, '#f6b73c', DEPARTMENTS[this.floor] ?? '');
         if (this.floor === 1) {
+          this.toast('Windows open outward here. When a frame lights up, crouch or get clear.', 'warn');
           this.toast(`${this.prompt('safety')} snaps the safety line: levels the deck and buys you a second.`, 'good');
-        }
-        if (this.floor === FLOOR_COUNT - 1) {
+        } else if (this.floor === 2) {
+          this.toast('Heavy debris from here up. A red marker shows where it lands, so be elsewhere.', 'warn');
+        } else if (this.floor === FLOOR_COUNT - 1) {
           this.toast('Penthouse. Whatever is going on in there, finish the glass.', 'warn');
+        } else {
+          this.toast(`Floor ${41 + this.floor}. ${PANE.perFloor} panes.`, 'info');
         }
       }
       return;
@@ -364,6 +426,7 @@ export class GameScene extends Phaser.Scene {
     audio.setWinch(true);
     audio.play('ratchet', { volume: 0.6 });
     this.fx.banner('ASCENDING', '#f6b73c', `floor ${41 + this.floor}`);
+    this.openDraft();
   }
 
   private updateSoap(dt: number, intent: InputIntent): void {
@@ -377,13 +440,14 @@ export class GameScene extends Phaser.Scene {
       }
     } else if (nearBucket && !intent.cleanHeld) {
       const before = this.soap;
-      this.soap = Math.min(RULES.soapCapacity, this.soap + RULES.soapRefill * dt);
-      if (before < RULES.soapCapacity && this.soap >= RULES.soapCapacity) {
+      const cap = this.soapCapacity;
+      this.soap = Math.min(cap, this.soap + RULES.soapRefill * this.perks.refillScale * cap / RULES.soapCapacity * dt);
+      if (before < cap && this.soap >= cap) {
         audio.play('chime', { volume: 0.4 });
       }
     }
 
-    if (!this.sawDrySoap && this.soap < RULES.soapCapacity * 0.25) {
+    if (!this.sawDrySoap && this.soap < this.soapCapacity * 0.25) {
       this.sawDrySoap = true;
       this.toast('Soap running low — the bucket is at the left end of the deck.', 'warn');
     }
@@ -392,11 +456,12 @@ export class GameScene extends Phaser.Scene {
   /** Convert squeegee position into actual erased grime and score. */
   private applyCleaning(dt: number): void {
     const wet = this.soap > 0;
-    const power = SQUEEGEE.power * (wet ? 1 : RULES.drySqueegeeScale) * dt;
+    const power = SQUEEGEE.power * this.perks.cleanPowerScale * (wet ? 1 : RULES.drySqueegeeScale) * dt;
     const panes = this.tower.panesOnFloor(this.floor);
+    const half = SQUEEGEE.bladeHalfWidth * this.perks.bladeWidthScale;
     let gained = 0;
 
-    for (const dx of [-SQUEEGEE.bladeHalfWidth, 0, SQUEEGEE.bladeHalfWidth]) {
+    for (const dx of half > SQUEEGEE.bladeHalfWidth * 1.2 ? [-half, -half / 2, 0, half / 2, half] : [-half, 0, half]) {
       const p = this.sim.pointAt(this.washer.bladeX + dx, this.washer.bladeLift);
       for (const pane of panes) {
         if (Math.abs(pane.cx - p.x) > PANE.width / 2 + SQUEEGEE.sampleRadius) continue;
@@ -422,9 +487,15 @@ export class GameScene extends Phaser.Scene {
     for (const pane of panes) {
       if (pane.progress >= RULES.floorTarget && !pane.bonusPaid) {
         pane.bonusPaid = true;
+        const before = this.score.multiplier;
         const points = this.score.finishPane();
         this.fx.popup(pane.cx, pane.cy, `+${points}`, '#5ce8a0');
         audio.play('chime', { volume: 0.55 });
+        if (this.score.multiplier > before) {
+          // Each streak step rings a little higher, so the climb is audible.
+          audio.play('sparkle', { volume: 0.7, detune: (this.score.multiplier - 2) * 200 });
+          this.fx.popup(pane.cx, pane.cy - 40, `STREAK x${this.score.multiplier}`, '#d9f24e');
+        }
       }
       if (pane.spotless && !pane.spotlessPaid) {
         pane.spotlessPaid = true;
@@ -514,13 +585,19 @@ export class GameScene extends Phaser.Scene {
     }
 
     if (this.washer.state === 'hang') {
+      if (!this.wasHanging) {
+        this.wasHanging = true;
+        this.washer.hangTimer += this.perks.gripBonus;
+      }
       this.events.emit('grab', {
         active: true,
         progress: this.washer.hangTaps / RULES.grabTaps,
         timeLeft: Math.max(0, this.washer.hangTimer),
+        timeMax: RULES.grabWindow + this.perks.gripBonus,
         touch: this.controls.touchActive,
       });
     } else {
+      this.wasHanging = false;
       this.clearGrab();
     }
 
@@ -684,15 +761,16 @@ export class GameScene extends Phaser.Scene {
       floorCount: FLOOR_COUNT,
       floorProgress: this.tower.floorProgress(this.floor),
       soap: this.soap,
-      soapCapacity: RULES.soapCapacity,
+      soapCapacity: this.soapCapacity,
       tilt: this.sim.angle,
       dumpAngle: SIM.dumpAngle,
       safetyCooldown: this.safetyCooldown,
-      safetyCooldownMax: RULES.safetyLineCooldown,
+      safetyCooldownMax: RULES.safetyLineCooldown * this.perks.safetyCooldownScale,
       winchReady: this.winchReady,
       wind: this.hazards.wind,
       elapsed: this.elapsed,
       touch: this.controls.touchActive,
+      perks: this.perks.owned,
     };
     this.events.emit('hud', state);
   }
@@ -719,6 +797,7 @@ export class GameScene extends Phaser.Scene {
       bestMultiplier: this.score.bestMultiplier,
       timeSeconds: this.elapsed,
       reason,
+      perks: this.perks.owned,
     };
 
     this.scene.stop('UIScene');

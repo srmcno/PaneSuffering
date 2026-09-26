@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import { CSS, FONT, PALETTE, VIEW } from '../config';
 import { audio } from '../audio/AudioEngine';
 import { onKeyPress } from '../core/keys';
+import { PERKS } from '../systems/Perks';
+import { drawPerkGlyph } from '../ui/perkGlyph';
 import type { RunSummary } from '../types/GameTypes';
 
 interface MenuEntry {
@@ -90,6 +92,7 @@ export class GameOverScene extends Phaser.Scene {
     this.buildPanel();
     const lastDelay = this.buildRows();
     this.buildGrade(grade, lastDelay + 260);
+    this.buildPerks(lastDelay + 520);
     this.buildBestLine(lastDelay + 620);
     this.buildButtons(lastDelay + 760);
     this.bindInput();
@@ -159,36 +162,48 @@ export class GameOverScene extends Phaser.Scene {
 
   private buildHeadline(): void {
     const s = this.summary;
-    const headline = s.win ? 'SHIFT COMPLETE' : `CAUSE OF TERMINATION: ${s.reason.toUpperCase()}`;
+    const headline = s.win ? 'SHIFT COMPLETE' : 'TERMINATED';
     const sub = s.win
       ? 'THE GLASS IS CLEAN. THE VIEW IS STILL AWFUL.'
       : WRY[(s.floorsCleared + s.panesCleaned) % WRY.length];
 
     const title = this.add
-      .text(CX, 74, headline, {
+      .text(CX, 26, headline, {
         fontFamily: FONT,
-        fontSize: s.win ? '62px' : '40px',
+        fontSize: '56px',
         color: s.win ? CSS.good : CSS.danger,
         fontStyle: 'bold',
-        letterSpacing: s.win ? 10 : 4,
+        letterSpacing: 10,
         align: 'center',
       })
       .setOrigin(0.5, 0)
       .setStroke('#04060c', 6)
       .setShadow(0, 4, '#000000cc', 10, false, true);
+    title.setAlpha(0).setScale(1.12);
+    this.tweens.add({ targets: title, alpha: 1, scale: 1, duration: 620, ease: 'Quad.Out' });
 
-    // `reason` is free text, so shrink to fit rather than wrap into the panel.
-    const maxW = VIEW.W - 170;
-    let size = s.win ? 62 : 40;
-    while (title.width > maxW && size > 20) {
-      size -= 2;
-      title.setFontSize(size);
+    // `reason` is free text: it gets its own wrapped line under the headline
+    // instead of being crammed into it, which ran off both edges of the screen.
+    let bottom = 26 + title.height;
+    if (!s.win) {
+      const cause = this.add
+        .text(CX, bottom + 2, `CAUSE: ${s.reason.toUpperCase()}`, {
+          fontFamily: FONT,
+          fontSize: '15px',
+          color: CSS.paper,
+          fontStyle: 'bold',
+          letterSpacing: 3,
+          align: 'center',
+          wordWrap: { width: VIEW.W - 260 },
+        })
+        .setOrigin(0.5, 0)
+        .setAlpha(0);
+      this.tweens.add({ targets: cause, alpha: 0.92, duration: 480, delay: 260 });
+      bottom = cause.y + cause.height;
     }
 
     // Clamp so a tall headline can never push the strapline under the panel.
-    const ruleY = Math.min(74 + title.height + 14, PANEL_Y - 46);
-    title.setAlpha(0).setScale(1.12);
-    this.tweens.add({ targets: title, alpha: 1, scale: 1, duration: 620, ease: 'Quad.Out' });
+    const ruleY = Math.min(bottom + 14, PANEL_Y - 46);
 
     const rule = this.add.graphics().setAlpha(0);
     this.hazard(rule, CX - 170, ruleY, 340, 8, 1);
@@ -351,6 +366,31 @@ export class GameOverScene extends Phaser.Scene {
         this.tweens.add({ targets: word, alpha: 1, y: BADGE_Y + 108, duration: 320, ease: 'Quad.Out' });
       },
     });
+  }
+
+  /** The run's requisitions, in the order they were signed for. */
+  private buildPerks(delay: number): void {
+    const owned = this.summary.perks ?? [];
+    if (owned.length === 0) return;
+    const size = 26;
+    const pitch = size + 6;
+    const y = BADGE_Y + 142;
+    const x0 = BADGE_X - ((owned.length - 1) * pitch) / 2;
+    const g = this.add.graphics().setAlpha(0);
+    owned.forEach((p, i) => {
+      const def = PERKS[p.id];
+      const x = x0 + i * pitch;
+      g.fillStyle(PALETTE.ink, 0.9);
+      g.fillRoundedRect(x - size / 2, y - size / 2, size, size, 5);
+      g.lineStyle(1, def.color, 0.55);
+      g.strokeRoundedRect(x - size / 2 + 0.5, y - size / 2 + 0.5, size - 1, size - 1, 5);
+      drawPerkGlyph(g, def.glyph, x, y, size * 0.72, def.color);
+      for (let k = 0; k < p.stacks && def.maxStacks > 1; k++) {
+        g.fillStyle(def.color, 1);
+        g.fillRect(x - size / 2 + 4 + k * 6, y + size / 2 + 3, 4, 2);
+      }
+    });
+    this.tweens.add({ targets: g, alpha: 1, duration: 400, delay });
   }
 
   private buildBestLine(delay: number): void {

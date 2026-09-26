@@ -20,6 +20,8 @@ export class ScoreSystem {
   panesCleaned = 0;
   spotlessCount = 0;
   bestMultiplier = 1;
+  /** Flat payout scale from upgrades (hazard pay). */
+  scale = 1;
 
   /** Kept as a float so a slow scrub still accrues; exposed rounded. */
   private total = 0;
@@ -37,7 +39,7 @@ export class ScoreSystem {
   /** Continuous points for actual cleaning. */
   addScrub(progressDelta: number): void {
     if (progressDelta <= 0) return;
-    this.total += progressDelta * SCRUB_RATE * this.multiplier;
+    this.total += progressDelta * SCRUB_RATE * this.multiplier * this.scale;
   }
 
   /**
@@ -45,7 +47,7 @@ export class ScoreSystem {
    * threshold. Returns the points awarded.
    */
   finishPane(): number {
-    const points = PANE_BONUS * this.multiplier;
+    const points = Math.round(PANE_BONUS * this.multiplier * this.scale);
     this.total += points;
     this.panesCleaned++;
     this.streak++;
@@ -59,7 +61,7 @@ export class ScoreSystem {
    * once for each rather than paid the spotless bonus twice.
    */
   finishSpotless(): number {
-    const points = SPOTLESS_BONUS * this.multiplier;
+    const points = Math.round(SPOTLESS_BONUS * this.multiplier * this.scale);
     this.total += points;
     this.spotlessCount++;
     return points;
@@ -68,14 +70,14 @@ export class ScoreSystem {
   /** Floor clear bonus, decaying with time taken. Returns the points awarded. */
   finishFloor(seconds: number): number {
     const base = Math.max(FLOOR_FLOOR, FLOOR_BASE - FLOOR_DECAY_PER_SEC * seconds);
-    const points = Math.round(base) * this.multiplier;
+    const points = Math.round(base * this.multiplier * this.scale);
     this.total += points;
     return points;
   }
 
   /** Reward for surviving a hazard by a hair. Returns the points awarded. */
   closeShave(): number {
-    const points = CLOSE_SHAVE * this.multiplier;
+    const points = Math.round(CLOSE_SHAVE * this.multiplier * this.scale);
     this.total += points;
     return points;
   }

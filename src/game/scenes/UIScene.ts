@@ -1,6 +1,8 @@
 import Phaser from 'phaser';
 import { CSS, FLOOR_COUNT, FONT, PALETTE, RULES, SIM, VIEW } from '../config';
 import type { HudState, ToastTone } from '../types/GameTypes';
+import { PERKS } from '../systems/Perks';
+import { drawPerkGlyph } from '../ui/perkGlyph';
 
 interface ToastPayload {
   text: string;
@@ -11,12 +13,16 @@ interface GrabPayload {
   active: boolean;
   progress: number;
   timeLeft: number;
+  /** Full grip window, which upgrades can lengthen. */
+  timeMax?: number;
   /** Touch pads are driving the run, so the prompt must not name a key. */
   touch: boolean;
 }
 
 const CX = VIEW.W / 2;
 const SAFE = 26;
+const SCORE_DIGITS = 6;
+const SCORE_CELL = 33;
 
 /* Tilt gauge: a plumb-bob inclinometer hanging from the top of the frame. */
 const GAUGE_PIVOT_Y = 40;
@@ -33,6 +39,8 @@ const HEALTH_Y = 108;
 const HEALTH_SEG_W = 20;
 const HEALTH_SEG_H = 12;
 const HEALTH_GAP = 4;
+const PERK_Y = 142;
+const PERK_SIZE = 26;
 
 const FLOOR_RIGHT = VIEW.W - SAFE;
 const FLOOR_STACK_BOTTOM = 176;
@@ -80,6 +88,7 @@ const IDLE_HUD: HudState = {
   wind: 0,
   elapsed: 0,
   touch: false,
+  perks: [],
 };
 
 /**
@@ -109,7 +118,10 @@ export class UIScene extends Phaser.Scene {
   private dyn!: Phaser.GameObjects.Graphics;
   private grabGfx!: Phaser.GameObjects.Graphics;
 
-  private scoreText!: Phaser.GameObjects.Text;
+  private readonly scoreDigits: Phaser.GameObjects.Text[] = [];
+  private scoreLit = '';
+  private perkStrip?: Phaser.GameObjects.Graphics;
+  private perkKey = '';
   private multText!: Phaser.GameObjects.Text;
   private floorText!: Phaser.GameObjects.Text;
   private tiltText!: Phaser.GameObjects.Text;
@@ -147,6 +159,10 @@ export class UIScene extends Phaser.Scene {
     this.hud = { ...IDLE_HUD };
     this.grab = { active: false, progress: 0, timeLeft: 0, touch: false };
     this.scoreShown = 0;
+    this.scoreDigits.length = 0;
+    this.scoreLit = '';
+    this.perkStrip = undefined;
+    this.perkKey = '';
     this.healthShown = 1;
     this.progressShown = 0;
     this.soapShown = 1;
@@ -214,9 +230,40 @@ export class UIScene extends Phaser.Scene {
       });
     }
 
+    const perkKey = state.perks.map((p) => `${p.id}${p.stacks}`).join(',');
+    if (perkKey !== this.perkKey) {
+      const fresh = this.perkKey !== '' || state.perks.length > 0;
+      this.perkKey = perkKey;
+      this.drawPerkStrip(state, fresh);
+    }
+
     this.winchLabel.setText(state.touch ? 'HOLD ASCEND PAD' : 'HOLD W — ASCEND');
     if (state.winchReady !== this.winchShown) this.setWinchPrompt(state.winchReady);
     this.hud = state;
+  }
+
+  /** A row of owned upgrades under the integrity bar, with stack pips. */
+  private drawPerkStrip(state: HudState, flash: boolean): void {
+    this.perkStrip ??= this.add.graphics().setDepth(10);
+    const g = this.perkStrip;
+    g.clear();
+    state.perks.forEach((p, i) => {
+      const def = PERKS[p.id];
+      const x = SAFE + i * (PERK_SIZE + 6);
+      g.fillStyle(PALETTE.ink, 0.82);
+      g.fillRoundedRect(x, PERK_Y, PERK_SIZE, PERK_SIZE, 5);
+      g.lineStyle(1, def.color, 0.55);
+      g.strokeRoundedRect(x + 0.5, PERK_Y + 0.5, PERK_SIZE - 1, PERK_SIZE - 1, 5);
+      drawPerkGlyph(g, def.glyph, x + PERK_SIZE / 2, PERK_Y + PERK_SIZE / 2, PERK_SIZE * 0.72, def.color);
+      for (let k = 0; k < p.stacks && def.maxStacks > 1; k++) {
+        g.fillStyle(def.color, 1);
+        g.fillRect(x + 4 + k * 6, PERK_Y + PERK_SIZE + 3, 4, 2);
+      }
+    });
+    if (flash && state.perks.length > 0) {
+      g.setAlpha(0.2);
+      this.tweens.add({ targets: g, alpha: 1, duration: 500, ease: 'Quad.Out' });
+    }
   }
 
   private onToast(payload: ToastPayload): void {
@@ -375,31 +422,23 @@ export class UIScene extends Phaser.Scene {
   private buildReadouts(): void {
     this.text(SAFE, 20, 'SHIFT SCORE', 10, CSS.dim, 4);
 
-    // Odometer ghost: unlit leading zeros behind the live figure.
-    this.add
-      .text(SAFE, 34, '000000', {
-        fontFamily: FONT,
-        fontSize: '46px',
-        color: CSS.dim,
-        // Must match the live figure's weight or the glyph advances differ and
-        // the right-aligned digits stop lining up.
-        fontStyle: 'bold',
-        fixedWidth: 200,
-        align: 'right',
-      })
-      .setAlpha(0.13)
-      .setDepth(9);
-    this.scoreText = this.add
-      .text(SAFE, 34, '0', {
-        fontFamily: FONT,
-        fontSize: '46px',
-        color: CSS.amber,
-        fontStyle: 'bold',
-        fixedWidth: 200,
-        align: 'right',
-      })
-      .setShadow(0, 3, '#000000aa', 6, false, true)
-      .setDepth(10);
+    // Odometer: one fixed cell per digit, so proportional glyphs cannot drift
+    // out from under the unlit leading zeros the way two overlaid strings did.
+    for (let i = 0; i < SCORE_DIGITS; i++) {
+      this.scoreDigits.push(
+        this.add
+          .text(SAFE + i * SCORE_CELL, 34, '0', {
+            fontFamily: FONT,
+            fontSize: '46px',
+            color: CSS.dim,
+            fontStyle: 'bold',
+            fixedWidth: SCORE_CELL,
+            align: 'center',
+          })
+          .setShadow(0, 3, '#000000aa', 6, false, true)
+          .setDepth(10),
+      );
+    }
 
     this.multText = this.text(238, 62, 'x1', 28, CSS.paper, 1, true).setOrigin(0, 0.5);
     this.multText.setColor('#d9f24e');
@@ -638,7 +677,21 @@ export class UIScene extends Phaser.Scene {
   }
 
   private syncText(): void {
-    this.scoreText.setText(String(Math.round(this.scoreShown)));
+    const digits = String(Math.min(10 ** SCORE_DIGITS - 1, Math.round(this.scoreShown))).padStart(SCORE_DIGITS, '0');
+    if (digits !== this.scoreLit) {
+      const firstLit = Math.min(SCORE_DIGITS - 1, digits.search(/[1-9]/) < 0 ? SCORE_DIGITS - 1 : digits.search(/[1-9]/));
+      this.scoreDigits.forEach((t, i) => {
+        t.setText(digits[i]);
+        const lit = i >= firstLit;
+        t.setColor(lit ? CSS.amber : CSS.dim).setAlpha(lit ? 1 : 0.16);
+        if (lit && digits[i] !== this.scoreLit[i]) {
+          // The digit that just rolled over ticks, like the real counter.
+          t.setY(28);
+          this.tweens.add({ targets: t, y: 34, duration: 140, ease: 'Quad.easeOut' });
+        }
+      });
+      this.scoreLit = digits;
+    }
     this.multText.setText(`x${this.hud.multiplier}`);
     this.multText.setColor(this.hud.multiplier > 1 ? '#d9f24e' : CSS.dim);
 
@@ -939,7 +992,7 @@ export class UIScene extends Phaser.Scene {
 
     const a = this.grabBox.alpha;
     const s = this.grabBox.scale;
-    const frac = Phaser.Math.Clamp(this.grab.timeLeft / RULES.grabWindow, 0, 1);
+    const frac = Phaser.Math.Clamp(this.grab.timeLeft / (this.grab.timeMax ?? RULES.grabWindow), 0, 1);
     const progress = Phaser.Math.Clamp(this.grab.progress, 0, 1);
     const urgency = 1 - frac;
     const r = 128 * s;

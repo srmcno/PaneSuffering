@@ -5,3 +5,4 @@ dist-dev/
 .DS_Store
 .vite/
 npm-debug.log*
+artifact/

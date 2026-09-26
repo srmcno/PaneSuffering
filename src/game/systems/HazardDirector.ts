@@ -25,6 +25,8 @@ const MAX_CONCURRENT = 5;
 export class HazardDirector {
   /** Signed wind strength, -1..1, surfaced to the HUD. */
   wind = 0;
+  /** Scales how often pigeons are picked; pigeon spikes lower it. */
+  pigeonScale = 1;
 
   private hazards: Hazard[] = [];
   private spawnTimer = 4.5;
@@ -171,7 +173,7 @@ export class HazardDirector {
     const f = ctx.floor;
     const options: Array<{ weight: number; make: () => Hazard | null }> = [
       {
-        weight: 3.2 - f * 0.12,
+        weight: (3.2 - f * 0.12) * this.pigeonScale,
         make: () => new Pigeon(this.scene, ctx),
       },
       {

@@ -7,12 +7,13 @@ import { TitleScene } from './game/scenes/TitleScene';
 import { GameScene } from './game/scenes/GameScene';
 import { UIScene } from './game/scenes/UIScene';
 import { PauseScene } from './game/scenes/PauseScene';
+import { PerkScene } from './game/scenes/PerkScene';
 import { GameOverScene } from './game/scenes/GameOverScene';
 
 const game = new Phaser.Game({
   ...GAME_CONFIG,
   parent: 'app',
-  scene: [BootScene, TitleScene, GameScene, UIScene, PauseScene, GameOverScene],
+  scene: [BootScene, TitleScene, GameScene, UIScene, PauseScene, PerkScene, GameOverScene],
 });
 
 // Handle for dev tooling and automated smoke tests. Available in dev, and in
